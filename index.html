@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>客户汇总清单台账 · 多人协作</title>
+<style>
+  :root{
+    --primary:#4472C4; --deep:#2F5597; --light:#D9E2F3; --border:#D6DEEA;
+    --bg:#F5F7FB; --text:#1F2733; --muted:#78859A; --white:#fff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font-family:"Microsoft YaHei","PingFang SC",-apple-system,Segoe UI,sans-serif;font-size:14px}
+  button{font-family:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--border);
+         background:#fff;color:var(--text);padding:7px 13px;font-size:13px}
+  button:hover{border-color:var(--primary);color:var(--primary)}
+  button:disabled{opacity:.55;cursor:not-allowed}
+  .btn-p{background:var(--primary);border-color:var(--primary);color:#fff}
+  .btn-p:hover{background:var(--deep);border-color:var(--deep);color:#fff}
+  input,select{font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--border);
+               border-radius:6px;background:#fff;color:var(--text);width:100%;outline:none}
+  input:focus,select:focus{border-color:var(--primary);box-shadow:0 0 0 2px rgba(68,114,196,.12)}
+  input:disabled{background:#EEF1F7;color:#6B7688}
+  /* 业务编号：系统自动生成，只读、不可手输 */
+  input.auto-no{background:#EEF1F7;color:var(--deep);font-weight:700;letter-spacing:.5px;cursor:default}
+  input.auto-no:focus{border-color:var(--border);box-shadow:none}
+  code{background:#EEF2F9;padding:1px 5px;border-radius:4px;font-size:12px}
+  pre{background:#F3F6FC;border:1px solid var(--border);padding:10px;border-radius:6px;
+      white-space:pre-wrap;word-break:break-all;font-size:12px;margin:8px 0}
+  .muted{color:var(--muted)} .small{font-size:12px} hr{border:0;border-top:1px solid var(--border);margin:14px 0}
+
+  /* 登录 */
+  #loginView{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .login-card{width:100%;max-width:430px;background:#fff;border:1px solid var(--border);
+              border-radius:12px;padding:30px;box-shadow:0 8px 30px rgba(31,55,100,.07)}
+  .login-card h1{font-size:20px;margin:0 0 4px;color:var(--deep)}
+  .login-card .sub{color:var(--muted);font-size:12px;margin-bottom:22px}
+  .login-card label{display:block;margin-bottom:13px;font-size:13px}
+  .login-card label span{display:block;margin-bottom:5px;color:#4A5568}
+  .login-card .btn-p{width:100%;padding:9px;margin-top:4px;font-size:14px}
+  .reglink{margin-top:16px;text-align:center;font-size:12px;color:var(--muted);cursor:pointer;text-decoration:underline}
+  .warn,.ok{border-radius:7px;padding:12px;font-size:13px;line-height:1.7;margin-top:14px}
+  .warn{background:#FFF6E6;border:1px solid #F2D9A6;color:#8A5A00}
+  .ok{background:#EAF6EC;border:1px solid #BFE3C6;color:#20612C}
+  /* 隐藏改由元素内联 style 控制，避免 JS 清空 display 时回落到 CSS 的 display:none */
+  .regbox{margin-top:16px;border-top:1px dashed var(--border);padding-top:14px}
+
+  /* 主界面 */
+  header{background:#fff;border-bottom:1px solid var(--border);padding:12px 22px;
+         display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header .logo{font-size:16px;font-weight:700;color:var(--deep);margin-right:6px}
+  header .grow{flex:1}
+  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;margin:0 6px}
+  .r-admin{background:#E4ECFB;color:#2F5597} .r-manager{background:#E2EFDA;color:#548235}
+  .r-channel{background:#FFF0D9;color:#9C6500}
+  .wrap{padding:18px 22px 40px}
+  #kpi{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+  .card{background:#fff;border:1px solid var(--border);border-radius:9px;padding:12px 18px;min-width:150px}
+  .card span{display:block;color:var(--muted);font-size:12px;margin-bottom:5px}
+  .card b{font-size:20px;color:var(--deep)}
+  .toolbar{background:#fff;border:1px solid var(--border);border-radius:9px;padding:11px 13px;
+           display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  .toolbar .sep{width:1px;height:22px;background:var(--border);margin:0 3px}
+  .toolbar label{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
+  .toolbar select,.toolbar input[type=text]{width:auto;min-width:125px}
+  .tip{background:#FFF8E8;border:1px solid #F0DCAE;color:#8A5A00;padding:8px 12px;
+       border-radius:7px;font-size:12px;margin-bottom:12px}
+  .tablebox{background:#fff;border:1px solid var(--border);border-radius:9px;overflow:auto;max-height:68vh}
+  table{border-collapse:collapse;width:100%;white-space:nowrap;font-size:12.5px}
+  th{position:sticky;top:0;background:var(--primary);color:#fff;font-weight:600;
+     padding:9px 10px;text-align:left;z-index:2;border-right:1px solid rgba(255,255,255,.18)}
+  td{padding:8px 10px;border-bottom:1px solid #EDF1F7;border-right:1px solid #F2F5FA}
+  tbody tr:nth-child(even){background:#FAFBFE} tbody tr:hover{background:#EEF3FC}
+  td.wide{white-space:normal;min-width:190px;max-width:280px}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  td.empty{text-align:center;color:var(--muted);padding:36px}
+  .mini{padding:3px 9px;font-size:12px}
+  td.act{white-space:nowrap}
+  .mini.danger{color:#B42318;border-color:#F0C7C2}
+  .mini.danger:hover{background:#B42318;border-color:#B42318;color:#fff}
+  .btn-danger{background:#B42318;border-color:#B42318;color:#fff}
+  .btn-danger:hover{background:#8E1B14;border-color:#8E1B14;color:#fff}
+  .dsum{border:1px solid var(--border);border-radius:7px;overflow:hidden;margin:12px 0}
+  .dline{display:flex;font-size:13px;border-bottom:1px solid #EDF1F7}
+  .dline:last-child{border-bottom:0}
+  .dline span{width:96px;flex:none;padding:7px 11px;background:#F7F9FD;color:var(--muted)}
+  .dline b{padding:7px 11px;font-weight:600;word-break:break-all}
+  .st-red{background:#FFC7CE;color:#9C0006} .st-green{background:#C6EFCE;color:#006100}
+  .st-yellow{background:#FFEB9C;color:#7F6000} .st-yellow2{background:#FFF2CC;color:#7F6000}
+  .st-blue{background:#DDEBF7;color:#1F4E79} .st-grey{background:#E7E6E6;color:#666}
+  .st-purple{background:#E9E1F2;color:#5B3F87}
+  .foot{margin-top:9px;color:var(--muted);font-size:12px}
+
+  /* 列表排序（两种主排序 + 时间方向切换） */
+  .sortbar{background:#fff;border:1px solid var(--border);border-radius:9px;padding:9px 13px;
+           margin-bottom:12px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .sortbar .slabel{font-size:12px;color:var(--muted);font-weight:700;margin-right:3px}
+  .sortbar .ssep{width:1px;height:20px;background:var(--border);margin:0 5px}
+  .sortbar .shint{margin-left:auto;font-size:12px;color:var(--muted)}
+
+  /* 统计区间（时间筛选） */
+  .periodbar{background:#fff;border:1px solid var(--border);border-radius:9px;padding:10px 13px;
+             margin-bottom:14px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;position:relative}
+  .periodbar .plabel{font-size:12px;color:var(--muted);font-weight:700;margin-right:3px}
+  .chip{padding:5px 13px;border-radius:20px;font-size:12.5px;border:1px solid var(--border);
+        background:#fff;color:#4A5568;line-height:1.4}
+  .chip:hover{border-color:var(--primary);color:var(--primary)}
+  .chip.on{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:700}
+  .periodbar .psep{width:1px;height:20px;background:var(--border);margin:0 5px}
+  .pbtn{padding:5px 11px;font-size:12.5px}
+  .pbtn.on{background:var(--light);border-color:var(--primary);color:var(--deep)}
+  .pcur{margin-left:auto;font-size:12px;color:var(--muted)}
+  .pcur b{color:var(--deep)}
+  .pop{display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:30;background:#fff;
+       border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 36px rgba(20,35,65,.18);
+       padding:14px;width:440px;max-width:calc(100vw - 44px)}
+  .pop.show{display:block}
+  .ptabs{display:flex;gap:6px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:8px}
+  .ptab{padding:4px 12px;font-size:12.5px;border:0;background:transparent;color:var(--muted);border-radius:6px}
+  .ptab.on{background:var(--light);color:var(--deep);font-weight:700}
+  .pop h4{margin:0 0 10px;font-size:12.5px;color:var(--deep);font-weight:600}
+  .pop .yr{margin:12px 0 6px;font-size:12px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:8px}
+  .pop .yr button{padding:1px 8px;font-size:11px}
+  .mgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+  .mcell{display:flex;align-items:center;justify-content:center;gap:4px;border:1px solid var(--border);
+         border-radius:6px;padding:7px 2px;font-size:12px;cursor:pointer;user-select:none;background:#fff}
+  .mcell:hover{border-color:var(--primary)}
+  .mcell.on{background:var(--light);border-color:var(--primary);color:var(--deep);font-weight:700}
+  .mcell.zero{color:#A9B2C0}
+  .mcell .n{font-size:10px;color:var(--muted);font-weight:400}
+  .pop .prow{display:flex;align-items:center;gap:8px;margin:10px 0;font-size:12px;color:var(--muted)}
+  .pop .prow input[type=date]{width:auto;flex:1}
+  .pop .pfoot{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;
+              border-top:1px solid var(--border);padding-top:12px}
+  .pop .small{line-height:1.6}
+
+  /* 弹窗 */
+  #modal{position:fixed;inset:0;background:rgba(24,36,58,.42);z-index:50;
+         align-items:flex-start;justify-content:center;padding:5vh 16px;overflow:auto}
+  .modal-card{background:#fff;border-radius:12px;width:100%;max-width:760px;
+              box-shadow:0 18px 60px rgba(20,35,65,.25)}
+  .modal-head{padding:15px 20px;border-bottom:1px solid var(--border);font-weight:700;color:var(--deep)}
+  .modal-body{padding:18px 20px;max-height:64vh;overflow:auto}
+  .modal-foot{padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:9px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px}
+  .fld{display:block;font-size:12px;color:#4A5568}
+  .fld>span{display:block;margin-bottom:5px;font-weight:600}
+  .fld small{display:block;color:var(--muted);margin-top:4px;font-size:11px}
+  .chk{display:flex;align-items:center;gap:8px;font-size:13px;margin:12px 0}
+  .chk input{width:auto}
+  #toast{position:fixed;right:20px;bottom:22px;z-index:99;max-width:460px;padding:12px 16px;
+         border-radius:8px;font-size:13px;line-height:1.6;opacity:0;pointer-events:none;transition:.2s;
+         box-shadow:0 8px 26px rgba(20,35,65,.18)}
+  #toast.show{opacity:1} #toast.ok{background:#EAF6EC;color:#20612C;border:1px solid #BFE3C6}
+  #toast.err{background:#FDECEC;color:#9C0006;border:1px solid #F3C0C0}
+
+  /* 未保存确认层：盖在弹窗之上，绝不覆盖/清空表单 */
+  #confirmLayer{position:fixed;inset:0;background:rgba(24,36,58,.55);z-index:80;
+                align-items:center;justify-content:center;padding:20px}
+  .confirm-card{background:#fff;border-radius:12px;width:100%;max-width:430px;
+                box-shadow:0 20px 60px rgba(20,35,65,.30);overflow:hidden}
+  .confirm-head{padding:16px 20px 0;font-size:15px;font-weight:700;color:#8A5A00}
+  .confirm-body{padding:10px 20px 18px;font-size:13px;line-height:1.85;color:#4A5568}
+  .confirm-body b{color:var(--deep)}
+  .confirm-foot{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;
+                padding:12px 20px;border-top:1px solid var(--border);background:#FAFBFE}
+  .btn-ghost-danger{color:#B42318;border-color:#F0C7C2}
+  .btn-ghost-danger:hover{background:#B42318;border-color:#B42318;color:#fff}
+</style>
+</head>
+<body>
+
+<!-- ===================== 登录 ===================== -->
+<div id="loginView">
+  <div class="login-card">
+    <h1>客户汇总清单台账</h1>
+    <div class="sub">多人协作版 · supabase.com 登录</div>
+    <div id="loginBox">
+      <label><span>登录名</span><input id="loginPhone" type="text" placeholder="手机号 / 邮箱 / 用户名" autocomplete="username"></label>
+      <label><span>密码</span><input id="loginPw" type="password" placeholder="密码" autocomplete="current-password"></label>
+      <button id="btnLogin" class="btn-p">登 录</button>
+    </div>
+    <div class="muted small" id="projInfo" style="margin-top:10px;text-align:center"></div>
+    <div class="muted small" style="margin-top:6px;text-align:center">手机号会自动映射为 Supabase 邮箱账号，无需短信验证码</div>
+    <div class="reglink" id="toggleReg">首次部署？点这里创建第一个管理员账号</div>
+    <div class="regbox" id="firstDeploy" style="display:none">
+      <label><span>管理员手机号</span><input id="regPhone" type="tel" placeholder="11 位手机号（即登录名）"></label>
+      <label><span>密码</span><input id="regPw" type="password" placeholder="至少 6 位"></label>
+      <label><span>确认密码</span><input id="regPw2" type="password" placeholder="再输一次"></label>
+      <button id="btnReg">创建账号</button>
+      <div class="muted small" style="margin-top:8px">创建后还需在 SQL Editor 执行一条提升语句，页面会给出。</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 主界面 ===================== -->
+<div id="appView" style="display:none">
+  <header>
+    <span class="logo">客户汇总清单台账</span>
+    <span id="who"></span>
+    <span class="grow"></span>
+    <button id="btnRefresh">刷新</button>
+    <button id="btnExport">导出 CSV</button>
+    <button id="btnLogout">退出</button>
+  </header>
+
+  <div class="wrap">
+    <!-- 统计区间：快捷标签 + 月份勾选 + 自定义日期，作用于 KPI / 明细 / 导出 -->
+    <div class="periodbar" id="periodBar">
+      <span class="plabel">统计区间</span>
+      <button class="chip on" data-preset="all">全部时间</button>
+      <button class="chip" data-preset="thisMonth">本月</button>
+      <button class="chip" data-preset="lastMonth">上月</button>
+      <button class="chip" data-preset="last3">近 3 个月</button>
+      <button class="chip" data-preset="thisYear">今年</button>
+      <span class="psep"></span>
+      <button class="pbtn" id="btnMonths">▦ 选月份</button>
+      <button class="pbtn" id="btnRange">▧ 自定义区间</button>
+      <span class="pcur" id="periodCur"></span>
+
+      <div class="pop" id="periodPop">
+        <div class="ptabs">
+          <button class="ptab on" data-tab="months">按月份勾选</button>
+          <button class="ptab" data-tab="range">自定义日期</button>
+        </div>
+        <div id="tabMonths">
+          <h4>可跨年多选，格内数字为该月签单数</h4>
+          <div id="monthGroups"></div>
+          <div class="muted small" id="monthHint" style="margin-top:10px"></div>
+        </div>
+        <div id="tabRange" style="display:none">
+          <h4>按「签约日期」起止统计，留空表示不限</h4>
+          <div class="prow"><span style="width:30px">从</span><input type="date" id="rangeFrom"><span style="width:26px;text-align:center">到</span><input type="date" id="rangeTo"></div>
+          <div id="rangeQuick" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+          <div class="muted small" style="margin-top:10px">日期框点开即为日历；起止都留空 = 全部时间。</div>
+        </div>
+        <div class="pfoot">
+          <button id="btnPeriodClear">清除（全部时间）</button>
+          <button id="btnPeriodCancel">取消</button>
+          <button id="btnPeriodApply" class="btn-p">应用</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="kpi"></div>
+
+    <div id="readOnlyTip" class="tip" style="display:none">
+      当前为「渠道用户」：<b>只读</b>，仅能看到本渠道的数据。需要录入请让管理员为你开通客户经理账号。
+    </div>
+
+    <div class="toolbar">
+      <button id="btnNewRecord" class="btn-p">＋ 新增签单</button>
+      <span id="adminBtns" style="display:none">
+        <button id="btnAddChannel">＋ 新增渠道</button>
+        <button id="btnAddManager">＋ 新增客户经理</button>
+        <button id="btnAddChannelUser">＋ 新增渠道用户</button>
+      </span>
+      <span class="sep"></span>
+      <label id="chanWrap" style="display:none">渠道
+        <select id="chanFilter"><option value="">全部渠道</option></select>
+      </label>
+      <label>进度 <select id="filterProgress"></select></label>
+      <label>结账 <select id="filterSettle"></select></label>
+      <label>搜索 <input id="filterKw" type="text" placeholder="编号/姓名/地址"></label>
+      <span id="count" class="muted small"></span>
+    </div>
+
+    <!-- 列表排序：两种主排序 + 时间方向；作用于明细表与 CSV 导出 -->
+    <div class="sortbar" id="sortBar">
+      <span class="slabel">列表排序</span>
+      <button class="chip on" data-sort="date">按签约时间（同日按渠道）</button>
+      <button class="chip" data-sort="channel">按渠道（同渠道按时间）</button>
+      <span class="ssep"></span>
+      <button class="pbtn" id="btnSortDir">时间：新 → 旧</button>
+      <span class="shint" id="sortHint"></span>
+    </div>
+
+    <div class="tablebox">
+      <table>
+        <thead id="tblHead"></thead>
+        <tbody id="tblBody"></tbody>
+      </table>
+    </div>
+    <div class="foot">数据范围由数据库行级安全策略（RLS）控制，前端筛选只是辅助。金额单位为万元。</div>
+  </div>
+</div>
+
+<!-- ===================== 弹窗 ===================== -->
+<div id="modal" style="display:none">
+  <div class="modal-card">
+    <div class="modal-head"><span id="modalTitle"></span>
+      <button id="modalClose" style="float:right;padding:1px 9px;font-size:16px;line-height:1.2;border:0;background:transparent">×</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot">
+      <button id="modalCancel">取消</button>
+      <button id="modalSubmit" class="btn-p">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 未保存内容确认层：独立 DOM，不会覆盖正在编辑的表单 -->
+<div id="confirmLayer" style="display:none">
+  <div class="confirm-card">
+    <div class="confirm-head">⚠ 还有未保存的内容</div>
+    <div class="confirm-body" id="confirmText"></div>
+    <div class="confirm-foot">
+      <button id="confirmDiscard" class="btn-ghost-danger">不保存，直接关闭</button>
+      <button id="confirmKeep">保留草稿并关闭</button>
+      <button id="confirmStay" class="btn-p">继续编辑</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<!-- 下拉候选（datalist 可放在文档任意位置） -->
+<datalist id="channelList"></datalist>
+<datalist id="managerList"></datalist>
+
+<!-- supabase-js：优先本地 vendor，缺失时回退 CDN -->
+<script src="vendor/supabase-js.umd.min.js"></script>
+<script>
+  if (!window.supabase) {
+    document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"><\/script>');
+  }
+</script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
