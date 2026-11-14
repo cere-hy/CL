@@ -39,12 +39,9 @@
   .login-card label{display:block;margin-bottom:13px;font-size:13px}
   .login-card label span{display:block;margin-bottom:5px;color:#4A5568}
   .login-card .btn-p{width:100%;padding:9px;margin-top:4px;font-size:14px}
-  .reglink{margin-top:16px;text-align:center;font-size:12px;color:var(--muted);cursor:pointer;text-decoration:underline}
   .warn,.ok{border-radius:7px;padding:12px;font-size:13px;line-height:1.7;margin-top:14px}
   .warn{background:#FFF6E6;border:1px solid #F2D9A6;color:#8A5A00}
   .ok{background:#EAF6EC;border:1px solid #BFE3C6;color:#20612C}
-  /* 隐藏改由元素内联 style 控制，避免 JS 清空 display 时回落到 CSS 的 display:none */
-  .regbox{margin-top:16px;border-top:1px dashed var(--border);padding-top:14px}
 
   /* 主界面 */
   header{background:#fff;border-bottom:1px solid var(--border);padding:12px 22px;
@@ -183,14 +180,13 @@
     </div>
     <div class="muted small" id="projInfo" style="margin-top:10px;text-align:center"></div>
     <div class="muted small" style="margin-top:6px;text-align:center">手机号会自动映射为 Supabase 邮箱账号，无需短信验证码</div>
-    <div class="reglink" id="toggleReg">首次部署？点这里创建第一个管理员账号</div>
-    <div class="regbox" id="firstDeploy" style="display:none">
-      <label><span>管理员手机号</span><input id="regPhone" type="tel" placeholder="11 位手机号（即登录名）"></label>
-      <label><span>密码</span><input id="regPw" type="password" placeholder="至少 6 位"></label>
-      <label><span>确认密码</span><input id="regPw2" type="password" placeholder="再输一次"></label>
-      <button id="btnReg">创建账号</button>
-      <div class="muted small" style="margin-top:8px">创建后还需在 SQL Editor 执行一条提升语句，页面会给出。</div>
-    </div>
+    <div class="muted small" style="margin-top:10px;text-align:center">账号由主管统一开通，没有账号请联系管理员</div>
+    <!-- 安全：登录页不提供任何自助注册入口；首个管理员只能在 Supabase Dashboard 手工创建。
+         下面三个空节点仅用于兼容浏览器缓存的旧版 app.js（旧脚本会给它们绑 onclick），
+         无内容、不可见、不可点击：既不会抛错，也不会暴露注册能力。 -->
+    <div id="toggleReg" style="display:none" aria-hidden="true"></div>
+    <div id="firstDeploy" style="display:none" aria-hidden="true"></div>
+    <div id="btnReg" style="display:none" aria-hidden="true"></div>
   </div>
 </div>
 
