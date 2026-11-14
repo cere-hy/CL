@@ -115,6 +115,9 @@
     if (/invalid login credentials/i.test(m)) {
       return m + ' ｜ 登录名需与开户时一致（手机号自动映射为 Supabase 邮箱账号）；并确认 Email Provider 已启用、Confirm email 已关闭。';
     }
+    if (/records_progress_ck|check constraint/i.test(m)) {
+      return m + ' ｜ 当前进度选了「过户中」或「待放款」，但数据库的 CHECK 约束还是旧 6 档：请在 Supabase → SQL Editor 整段执行一次 supabase_patch_progress.sql（幂等），执行完直接重新点「保存」即可，不用刷新页面。';
+    }
     if (/fetch|network|timeout|failed/i.test(m)) {
       return m + ' ｜ supabase.com 排查：① 免费项目是否被自动暂停（Dashboard 里点 Restore）；② URL 应为 https://<项目ID>.supabase.co，不是控制台网页地址；③ 浏览器能否访问该域名；④ 本平台没有 IP 白名单。';
     }
@@ -477,7 +480,10 @@
     $('#appView').style.display = 'none';
   }
 
-  // ---------------------------------------------------------------- 登录 / 注册
+  // ---------------------------------------------------------------- 登录
+  // 安全：本文件不提供任何「自助注册 / 自助创建管理员」能力。
+  // 公开页面不能留可自我提权的入口；首个管理员只能在 Supabase Dashboard 手工创建，
+  // 之后日常开账号由管理员登录后走 createAccount()（先写 user_invites 白名单再 signUp）。
   async function doLogin() {
     var name = $('#loginPhone').value.trim();
     var pw = $('#loginPw').value;
@@ -488,28 +494,6 @@
     $('#btnLogin').disabled = false;
     if (r.error) return toast(netHint(r.error), 'err');
     await afterLogin(r.data.user);
-  }
-
-  async function doFirstSignup() {
-    var phone = $('#regPhone').value.trim();
-    var pw = $('#regPw').value;
-    var pw2 = $('#regPw2').value;
-    if (!phoneOk(phone)) return toast('请输入 11 位手机号（即以后的登录名）', 'err');
-    if (!pw || pw.length < 6) return toast('密码至少 6 位', 'err');
-    if (pw !== pw2) return toast('两次密码不一致', 'err');
-    var r = await db.auth.signUp({
-      email: authEmail(phone), password: pw,
-      options: { data: { phone: phone, display_name: phone } }
-    });
-    if (r.error) return toast(netHint(r.error), 'err');
-    // 注册成功可能已自动登录（此时还是无数据的空渠道用户），退出来让流程干净
-    try { await db.auth.signOut(); } catch (e) { /* 忽略 */ }
-    $('#firstDeploy').style.display = 'block';
-    $('#firstDeploy').innerHTML =
-      '<div class="ok"><b>账号已创建：' + esc(phone) + '</b><br>' +
-      '现在到 supabase.com → SQL Editor 执行下面这句，把它提升为管理员，然后回来登录：' +
-      '<pre>update public.profiles set role = \'admin\'\n where phone = \'' + esc(phone) + '\';</pre>' +
-      '（若提示需先确认邮箱，请在 Authentication → Sign In / Providers → Email 关闭 “Confirm email”）</div>';
   }
 
   async function afterLogin(user) {
@@ -658,6 +642,13 @@
   // ---------------------------------------------------------------- 弹窗
   var modalSeq = 0;   // 弹窗序号：异步取编号回来时，避免写进已经关掉/换掉的弹窗
 
+  // 团队账号约定：登录名一律为本人 11 位手机号；
+  // 客户经理初始密码 = 该手机号，渠道用户初始密码 = 6 个八（表单已自动带出，主管仍可手动改）
+  var DEFAULT_CHANNEL_PW = '888888';
+  function defaultPassword(role, phone) {
+    return role === 'manager' ? phone : DEFAULT_CHANNEL_PW;
+  }
+
   // ---- 未保存内容保护 --------------------------------------------------------
   // 只比对「用户可编辑」字段。业务编号 f_biz_no 是系统自动填的只读框，
   // 取号完成 / 改日期重取号都会让它变化，绝不能算成用户改动，否则一打开就误报。
@@ -778,7 +769,7 @@
     toast(key ? '草稿已保留，下次打开「' + drafts[key].label + '」会自动恢复' : '已关闭');
   }
 
-  function openModal(title, html, onSubmit, submitText, formKey) {
+  function openModal(title, html, onSubmit, submitText, formKey, defaults) {
     // 已有弹窗没保存时，先确认再替换，避免点别的按钮把整个表单冲掉
     if (modalVisible() && formDirty()) {
       return showConfirmDiscard(function () {
@@ -794,6 +785,13 @@
     $('#modalSubmit').className = 'btn-p';
     $('#modal').style.display = 'flex';
     hideConfirm();
+
+    // 表单默认值（如渠道账号初始密码 888888）显式赋值，不依赖 HTML value 属性解析；
+    // 放在草稿恢复之前，草稿仍能覆盖默认值；两者都在 snapshotForm() 之前，不会误判为「已改动」
+    if (defaults) Object.keys(defaults).forEach(function (id) {
+      var el = $('#' + id);
+      if (el) el.value = defaults[id];
+    });
 
     var draft = activeFormKey && drafts[activeFormKey];
     if (draft) {
@@ -995,14 +993,15 @@
       '<hr><label class="chk"><input type="checkbox" id="c_make_account"> 同时创建该渠道的登录账号</label>' +
       '<div id="c_account" class="grid" style="display:none">' +
         fld('登录手机号 *', inp('c_phone', '', 'tel', 'placeholder="11 位手机号"')) +
-        fld('初始密码 *', inp('c_pw', '', 'password', 'placeholder="至少 6 位"')) +
-      '</div><p class="muted small">渠道名单存在 channels 表里，随时可加；创建账号会写入 user_invites 并自动 signUp，角色为「渠道用户」，绑定该渠道，登录后只读本渠道数据。</p>';
+        fld('初始密码', inp('c_pw', DEFAULT_CHANNEL_PW, 'password', 'placeholder="默认 888888"')) +
+      '</div><p class="muted small">渠道名单存在 channels 表里，随时可加；创建账号会写入 user_invites 并自动 signUp，角色为「渠道用户」，绑定该渠道，登录后只读本渠道数据。<br>账号约定：登录名 = 该手机号，初始密码默认 <b>888888</b>（6 个八，可手动修改）。</p>';
     openModal('新增渠道', h, async function () {
       var name = v('c_name');
       if (!name) return toast('请填写渠道名称', 'err');
       if (channels.indexOf(name) >= 0) return toast('该渠道已存在', 'err');
       var makeAcc = $('#c_make_account').checked;
       var phone = v('c_phone'), pw = v('c_pw');
+      if (makeAcc && !pw) pw = DEFAULT_CHANNEL_PW;   // 留空按团队约定补默认密码
       if (makeAcc && (!phoneOk(phone) || pw.length < 6)) return toast('请填写合法的手机号和至少 6 位密码', 'err');
 
       var r = await db.from('channels').insert({ name: name });
@@ -1016,7 +1015,7 @@
       await loadChannels();
       renderShell();
       await loadRecords();
-    }, '保存', 'channel:new');
+    }, '保存', 'channel:new', { c_pw: DEFAULT_CHANNEL_PW });
     $('#c_make_account').onchange = function () {
       $('#c_account').style.display = this.checked ? 'grid' : 'none';
     };
@@ -1030,13 +1029,15 @@
             '默认候选：何燕、孔得杨、梁雄凯、王迎佳；也可手填新姓名新增')
       : fld('归属渠道 *', '<select id="p_channel">' + opts(channels, '', '请选择') + '</select>')) +
       fld('登录手机号 *', inp('p_phone', '', 'tel', 'placeholder="11 位手机号"')) +
-      fld('初始密码 *', inp('p_pw', '', 'password', 'placeholder="至少 6 位"')) +
+      fld('初始密码', inp('p_pw', isMgr ? '' : DEFAULT_CHANNEL_PW, 'password',
+          isMgr ? 'placeholder="默认与手机号相同，可修改"' : 'placeholder="默认 888888"')) +
       '<p class="muted small">' + (isMgr
-        ? '创建后该账号登录后只能看到/录入「客户经理 = 本人」的签单，且客户经理、录入人自动锁定为本人。'
-        : '创建后该账号登录后只能看到「渠道 = 所绑定渠道」的数据，且为只读。') + '</p>';
+        ? '账号约定：登录名 = 本人手机号，初始密码 = 同一手机号（填手机号后自动带出，可手动修改）。创建后只能看到/录入「客户经理 = 本人」的签单，且客户经理、录入人自动锁定为本人。'
+        : '账号约定：登录名 = 本人手机号，初始密码 = <b>888888</b>（6 个八，可手动修改）。创建后只能看到「渠道 = 所绑定渠道」的数据，且为只读。') + '</p>';
     openModal(isMgr ? '新增客户经理' : '新增渠道用户', h, async function () {
       var phone = v('p_phone'), pw = v('p_pw');
       if (!phoneOk(phone)) return toast('请输入 11 位手机号', 'err');
+      if (!pw) pw = defaultPassword(role, phone);   // 留空按团队约定补默认密码
       if (pw.length < 6) return toast('密码至少 6 位', 'err');
       var inv = { role: role, display_name: isMgr ? v('p_name') : v('p_channel') };
       if (isMgr) {
@@ -1051,7 +1052,17 @@
       closeModal();
       toast('账号已开通：' + phone);
       await loadManagers();
-    }, '保存', 'person:' + role);
+    }, '保存', 'person:' + role, isMgr ? null : { p_pw: DEFAULT_CHANNEL_PW });
+
+    // 客户经理：填手机号后自动把密码带成同一手机号；主管手动改过密码就不再跟随
+    var phoneEl = $('#p_phone'), pwEl = $('#p_pw');
+    if (isMgr && phoneEl && pwEl) {
+      pwEl._pwAuto = true;
+      pwEl.oninput = function () { this._pwAuto = false; };
+      phoneEl.oninput = function () {
+        if (pwEl._pwAuto) pwEl.value = this.value;
+      };
+    }
   }
 
   // 管理员一键开户：写邀请 -> 独立客户端 signUp -> 恢复管理员会话
@@ -1115,11 +1126,15 @@
   function bind() {
     $('#btnLogin').onclick = doLogin;
     $('#loginPw').onkeydown = function (e) { if (e.key === 'Enter') doLogin(); };
-    $('#btnReg').onclick = doFirstSignup;
-    $('#toggleReg').onclick = function () {
-      var el = $('#firstDeploy');
-      el.style.display = el.style.display === 'block' ? 'none' : 'block';
-    };
+    // 安全兜底：无论加载的是哪一版 index.html，都不允许登录页出现自助注册入口。
+    // 旧版页面残留的注册框会被清空并隐藏；新版只有三个隐藏空节点，同样处理。
+    ['toggleReg', 'firstDeploy', 'btnReg'].forEach(function (id) {
+      var el = $('#' + id);
+      if (!el) return;
+      el.style.display = 'none';
+      el.innerHTML = '';
+      el.onclick = null;
+    });
     $('#btnLogout').onclick = async function () { await db.auth.signOut(); };
     $('#btnRefresh').onclick = loadRecords;
     $('#btnNewRecord').onclick = function () { openRecord(null); };
