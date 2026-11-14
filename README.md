@@ -24,6 +24,9 @@
 > **安全｜登录页已移除「创建第一个管理员账号」自助入口**
 > 页面是公开可访问的，不能留任何注册 / 提权入口。现在首个管理员**只能在 Supabase Dashboard 手工创建**（见第 7 步），日常开账号由管理员登录后在工具栏操作；前端还会兜底清空旧版页面缓存里残留的注册框。
 
+> **★ 本次「界面美化 + 密码管理」需要跑一条 SQL（当前已部署的库）**
+> 界面与「自己修改密码」是纯前端，打开就能用；但**主管重置他人密码**依赖数据库函数 `public.admin_reset_password`，已部署的库必须在 SQL Editor **整段执行一次 `supabase_patch_password.sql`**（幂等，只加函数与授权，不动任何表结构和数据）。全新空库直接跑 `supabase_schema.sql`（7.2 段已内置）。不跑的话，只有点「重置为 888888」时会报 `could not find the function`，其它功能不受影响。执行后浏览器 **Ctrl+F5 硬刷新**。
+
 ---
 
 ## 一、权限模型（严格对应台账列）
@@ -162,19 +165,39 @@ Z + 签约日期(YYMMDD) + 当日流水号（至少 2 位，从 01 起；超过 
 - 自动生成的「业务编号」是只读框，取号 / 改日期重取号**不算用户改动**，所以一打开弹窗不会误报「有未保存内容」。
 - 草稿只存在**当前页面内存**，不写数据库、不跨浏览器、刷新页面即清空；重要内容还是建议及时保存。
 
+### 4.4 密码管理（自己改 / 主管重置）
+
+顶部右侧新增两个入口：
+
+| 入口 | 谁能用 | 做法 | 结果 |
+|---|---|---|---|
+| **修改密码** | 所有已登录用户 | 填「新密码 + 确认」→ 确认修改 | 走 GoTrue `auth.updateUser`，只改**当前会话本人**；即时生效，不掉线，主管也看不到新密码 |
+| **账号管理** | 仅主管（管理员） | 打开账号列表（可搜索手机号 / 姓名 / 渠道），点某人「重置为 888888」→ 行内二次确认 | 走数据库 `public.admin_reset_password(uuid)`，把该账号密码置为 **`888888`**；其现有登录会话立即失效 |
+
+规则与边界：
+
+- 重置后**下一次登录**必须用 `888888`，请当面/电话通知本人，并让对方尽快用「修改密码」改成自己的。
+- **不能重置自己**：账号列表里本人那行显示「本人 · 请用『修改密码』」，函数内也再挡一道。
+- 只改密码，**不改角色、不改绑定渠道/经理、不动任何台账数据**；可重复重置。
+- 「账号管理」列表读 `profiles`，受 RLS 约束只有管理员能读到全部账号；客户经理和渠道用户连按钮都看不到。
+- 前端点「重置」报 `could not find the function public.admin_reset_password` → 就是没跑 `supabase_patch_password.sql`，执行后刷新即可。
+
+> **安全设计**：浏览器端的 `auth.admin.updateUserById()` 需要 `service_role` / `sb_secret_` 密钥，那把钥匙放进公开网页会绕过全部 RLS，等于把整库交出去。因此改用数据库 `SECURITY DEFINER` 函数代写 `auth.users`，函数内独立校验 ① 已登录 ② 调用者是 admin ③ 不是本人 ④ 目标账号存在，并固定密码为 `888888`（不接受任意密码参数）；`EXECUTE` 只授予 `authenticated`，`anon` 无权调用。SQL Editor 里 `auth.uid()` 为空，匿名直调会被第 ① 道拒绝。
+
 ---
 
 ## 五、文件清单
 
 ```
 客户汇总清单台账.xlsx              Excel / WPS 在线版台账（字段来源）
-supabase_schema.sql               ★ 全新空库执行：5 张表 + 触发器 + 三角色 RLS（含删除策略）+ 自动编号 + 6 行样例
+supabase_schema.sql               ★ 全新空库执行：5 张表 + 触发器 + 三角色 RLS（含删除策略）+ 自动编号 + 密码重置函数 + 6 行样例
 supabase_patch_delete.sql         ★ 已部署过、有数据的库执行一次：补客户经理 delete 策略（幂等）
 supabase_patch_progress.sql       ★ 已部署过、有数据的库执行一次：换 7 档进度约束 + 合并「已结案」历史数据（幂等）
 supabase_patch_biz_no.sql         ★ 已部署过、有数据的库执行一次：自动编号函数 + 触发器 + 回填存量空编号（幂等）
+supabase_patch_password.sql       ★ 本次新增：主管重置他人密码的函数 + 授权（幂等，只加函数不动数据）
 supabase_upgrade.sql              仅旧库字段迁移用，本次【不要执行】
 frontend/
-  ├─ index.html                   三角色前端页面
+  ├─ index.html                   三角色前端页面（账簿式视觉 + 密码管理入口）
   ├─ app.js                       业务脚本
   ├─ config.js                   ★ 只需填 URL / ANON_KEY
   ├─ vendor/supabase-js.umd.min.js  已内置，离线可用（缺失时自动回退 CDN）
@@ -224,24 +247,26 @@ frontend/
 
 > 本次**不要**执行 `supabase_upgrade.sql` —— 它是给「已经跑过旧版脚本、需要保留旧数据」的场景用的，你是全新空库。
 >
-> **如果你已经跑过早期版本的 `supabase_schema.sql`（库里有数据）**：不用重跑主脚本（`CREATE TABLE IF NOT EXISTS` 不会更新已存在表的约束和策略）。改为在 SQL Editor **各执行一次**这三个幂等补丁：
+> **如果你已经跑过早期版本的 `supabase_schema.sql`（库里有数据）**：不用重跑主脚本（`CREATE TABLE IF NOT EXISTS` 不会更新已存在表的约束和策略）。改为在 SQL Editor **各执行一次**这四个幂等补丁：
 > - `supabase_patch_delete.sql` —— 补客户经理的 delete 策略；
 > - `supabase_patch_progress.sql` —— 换 7 档 CHECK 约束，并把「已结案」历史行迁移为「已放款」；
-> - `supabase_patch_biz_no.sql` —— 业务编号自动分配函数 + 触发器 + 回填存量空编号。
+> - `supabase_patch_biz_no.sql` —— 业务编号自动分配函数 + 触发器 + 回填存量空编号；
+> - `supabase_patch_password.sql` —— 主管重置他人密码的函数（本次新增）。
 >
-> 三个补丁彼此独立、都幂等，顺序随意；**全新空库一个都不用跑**。
+> 四个补丁彼此独立、都幂等，顺序随意；**全新空库一个都不用跑**。
 >
-> 跑没跑齐，用下面一条 SQL 自查（`progress_ck` 应含「过户中」「待放款」、`delete_policy` = 1、`alloc_fn` ≥ 1）：
+> 跑没跑齐，用下面一条 SQL 自查（`progress_ck` 含「过户中」「待放款」、`delete_policy` = 1、`alloc_fn` ≥ 1、`reset_fn` ≥ 1）：
 > ```sql
 > select
 >   (select pg_get_constraintdef(oid) from pg_constraint
 >     where conname = 'records_progress_ck' and conrelid = 'public.records'::regclass) as progress_ck,
 >   (select count(*) from pg_policies where schemaname = 'public' and tablename = 'records'
 >     and policyname = 'records_manager_delete') as delete_policy,
->   (select count(*) from pg_proc where proname = 'alloc_biz_no') as alloc_fn;
+>   (select count(*) from pg_proc where proname = 'alloc_biz_no') as alloc_fn,
+>   (select count(*) from pg_proc where proname = 'admin_reset_password') as reset_fn;
 > ```
 >
-> 典型症状：选「过户中 / 待放款」保存时报 `violates check constraint "records_progress_ck"`，就是 `progress` 补丁没跑。
+> 典型症状：选「过户中 / 待放款」保存时报 `violates check constraint "records_progress_ck"`，就是 `progress` 补丁没跑；点「重置为 888888」报 `could not find the function`，就是 `password` 补丁没跑。
 
 ### 第 4 步｜取 Project URL 与 Key
 
@@ -327,6 +352,8 @@ python3 -m http.server 8000
 
 密码框留空提交时，前端会按上表自动补齐，不会因漏填而开户失败；两个默认密码都 ≥ 6 位，满足 Supabase Auth 的最小长度。把 `手机号 + 密码` 发给同事即可协作；登录页直接填手机号，不用带 `@` 后缀。渠道账号是统一初始密码但**只能读自己渠道**，建议只发给对应渠道本人。
 
+**同事忘了密码**：主管点顶部「账号管理」→ 找到该账号 → 「重置为 888888」→ 行内二次确认，然后通知对方用 `888888` 登录并自行修改密码。任何人都可以用顶部「修改密码」改自己的密码，见 4.4 节。
+
 ---
 
 ## 七、登录名自动适配 Supabase
@@ -364,6 +391,8 @@ python3 -m http.server 8000
 10. **Excel 看板口径跟着改**：B 列变成公式后，业务总数不再用 `COUNTIFS(B,"<>")`（公式返回空串也算非空，会把 1000 行全算进去），改用必填的 D 列「渠道」判空。
 11. **排序在客户端统一收敛**：服务端查询只给稳定初始序，`sortView()` 按 `sortMode` / `sortTimeDesc` 对 `viewRows` 重排（KPI、明细、CSV 共用同一份已排序数组）。无签约日期的行单独兜底排末尾，修正 Postgres `DESC` 默认 `NULLS FIRST` 的问题；三级排序键保证同日同渠道也不会跳来跳去。
 12. **未保存保护不依赖 DOM 解析**：打开弹窗时对所有「用户可编辑字段」取基线快照，关闭时比对；同时用 `input` / `change` 事件做兜底。只读的业务编号、disabled 字段被排除，程序化赋值（自动取号、草稿恢复）不会触发误报。确认层是独立 DOM 节点，三个动作只操作确认层本身，表单始终不被重写。
+13. **密码管理分两条通道**：自己改走 `auth.updateUser`（GoTrue 只作用于当前会话用户）；主管重置他人走 `rpc('admin_reset_password')`，由 `SECURITY DEFINER` 函数在库内校验 admin 后用 pgcrypto 生成 bcrypt 写入 `auth.users`，并删除该账号的 `auth.sessions` / `auth.refresh_tokens` 使其立即掉线。前端永远拿不到 `service_role`。pgcrypto 所在 schema 由 `pg_proc` 动态定位，避免不同项目装在 `extensions` / `public` 的差异。
+14. **视觉是纯 CSS 层替换**：账簿风样式只改颜色、字体、间距、分隔方式、微动效与登录页布局；所有既有 `id`、class、`data-*` 属性和 JS 绑定点保持不变，新增节点在 `app.js` 里一律做空值保护（只换其中一个文件也不会白屏）。`prefers-reduced-motion` 下关闭全部动画，动效只用 `opacity` / `transform`，不触发布局重排。
 
 ---
 
@@ -395,6 +424,11 @@ python3 -m http.server 8000
 | 提示「当前库尚未启用服务端自动编号」 | 还没执行 `supabase_patch_biz_no.sql`。前端已降级可用，但多人同天录入易重号 → SQL Editor 执行一次补丁后 Ctrl+F5 |
 | 保存报 `duplicate key ... records_biz_no_uq` / 编号重复 | 同上：本地降级算号撞车。执行 `supabase_patch_biz_no.sql`，再重新打开新增弹窗取号 |
 | 新增弹窗一直「生成中…」、保存按钮一直灰 | ① 免费项目被暂停 → Dashboard 点 Restore；② 网络异常 → 刷新页面；③ 执行 `supabase_patch_biz_no.sql` 后 Ctrl+F5 硬刷新 |
+| 点「重置为 888888」报 `could not find the function public.admin_reset_password` / `schema cache` | 没执行 `supabase_patch_password.sql` → SQL Editor 整段跑一次（幂等），然后刷新页面。全新空库跑主脚本即可 |
+| 重置密码报 `permission denied for function` / `只有主管可以重置他人密码` | 当前登录账号不是 `admin`；或函数权限被改过 → 重跑 `supabase_patch_password.sql` 恢复 `grant execute to authenticated` |
+| 重置密码报 `缺少 pgcrypto 扩展` | 执行 `create extension if not exists pgcrypto with schema extensions;` 后重试（函数会自动定位所在 schema） |
+| 自己想改密码但列表里没有「重置」按钮 | 设计如此：本人请用顶部「修改密码」，函数也会拒绝重置自己 |
+| 界面还是旧样子 / 「修改密码」「账号管理」按钮不出现 | 浏览器缓存 → **Ctrl+F5 硬刷新**；`index.html` 里脚本已带 `app.js?v=20261114c` 强制拉新脚本，两个文件要一起覆盖 |
 | 想把业务编号改成自己编的号 | 不支持。编号是一笔业务的身份且要防重号，编辑时只读；确需修正历史编号，由管理员在 SQL Editor 手工 `update public.records set biz_no='...' where id=...`（别改成与其它行重复的号） |
 | Excel 版改了「签约日期」后编号变了 / 感觉重号 | 表格版 B 列是公式，会按新日期重新取号；请核对是否与其他行重号。Web 版编号入库后固定不变，无此问题 |
 
@@ -414,6 +448,8 @@ python3 -m http.server 8000
 ## 十一、安全须知
 
 - `Publishable key` / `anon key` 可以放前端，但**所有表必须开 RLS**（脚本已开），密钥本身不是权限边界。
-- `sb_secret_...` / `service_role` 只在服务端使用，绝不写入 `config.js`。
+- `sb_secret_...` / `service_role` 只在服务端使用，绝不写入 `config.js`。主管重置密码刻意不用 `auth.admin.*`，就是为了不把这把钥匙放进公开网页（见 4.4 节）。
+- `admin_reset_password()` 是 `SECURITY DEFINER`，所以额外做了四道校验并只授予 `authenticated`；`anon` 无权调用，SQL Editor 里匿名直调也会被 `auth.uid() is null` 拒绝。不要给它加 `security invoker`，也不要改成接受任意密码参数。
+- 初始密码 `888888` 是弱密码，只适合「重置后由本人立刻改掉」的短时状态；账号列表请只对主管开放。
 - 免费版项目长期不访问会暂停，正式使用建议升级套餐或保持定期访问。
 - 全员开户完成后，如需进一步收紧，可在 Authentication 关闭公开注册，之后由管理员用服务端密钥建号。**注意**：关闭后前端工具栏的「＋ 新增客户经理 / ＋ 新增渠道用户」会一并失效（它们依赖 `signUp`），只适合人员固定、不再开新号的情况。
