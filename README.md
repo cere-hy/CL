@@ -21,6 +21,9 @@
 > **本次「录入防误关 + 列表排序」是纯前端改动，不用再跑任何 SQL**
 > 覆盖 `frontend/index.html` 与 `frontend/app.js` 后，浏览器按 **Ctrl+F5 硬刷新** 才会加载新版（否则缓存的旧 JS 看起来像「按钮没加」）。Excel 版仅「使用说明」新增第十节（排序方法），数据与公式未变。详见第四节 4.2 / 4.3。
 
+> **安全｜登录页已移除「创建第一个管理员账号」自助入口**
+> 页面是公开可访问的，不能留任何注册 / 提权入口。现在首个管理员**只能在 Supabase Dashboard 手工创建**（见第 7 步），日常开账号由管理员登录后在工具栏操作；前端还会兜底清空旧版页面缓存里残留的注册框。
+
 ---
 
 ## 一、权限模型（严格对应台账列）
@@ -221,12 +224,24 @@ frontend/
 
 > 本次**不要**执行 `supabase_upgrade.sql` —— 它是给「已经跑过旧版脚本、需要保留旧数据」的场景用的，你是全新空库。
 >
-> **如果你已经跑过早期版本的 `supabase_schema.sql`（库里有数据）**：不用重跑主脚本（`CREATE TABLE IF NOT EXISTS` 不会更新已存在表的约束和策略）。改为在 SQL Editor **各执行一次**这两个幂等补丁：
+> **如果你已经跑过早期版本的 `supabase_schema.sql`（库里有数据）**：不用重跑主脚本（`CREATE TABLE IF NOT EXISTS` 不会更新已存在表的约束和策略）。改为在 SQL Editor **各执行一次**这三个幂等补丁：
 > - `supabase_patch_delete.sql` —— 补客户经理的 delete 策略；
 > - `supabase_patch_progress.sql` —— 换 7 档 CHECK 约束，并把「已结案」历史行迁移为「已放款」；
 > - `supabase_patch_biz_no.sql` —— 业务编号自动分配函数 + 触发器 + 回填存量空编号。
 >
 > 三个补丁彼此独立、都幂等，顺序随意；**全新空库一个都不用跑**。
+>
+> 跑没跑齐，用下面一条 SQL 自查（`progress_ck` 应含「过户中」「待放款」、`delete_policy` = 1、`alloc_fn` ≥ 1）：
+> ```sql
+> select
+>   (select pg_get_constraintdef(oid) from pg_constraint
+>     where conname = 'records_progress_ck' and conrelid = 'public.records'::regclass) as progress_ck,
+>   (select count(*) from pg_policies where schemaname = 'public' and tablename = 'records'
+>     and policyname = 'records_manager_delete') as delete_policy,
+>   (select count(*) from pg_proc where proname = 'alloc_biz_no') as alloc_fn;
+> ```
+>
+> 典型症状：选「过户中 / 待放款」保存时报 `violates check constraint "records_progress_ck"`，就是 `progress` 补丁没跑。
 
 ### 第 4 步｜取 Project URL 与 Key
 
@@ -266,32 +281,51 @@ python3 -m http.server 8000
 
 登录页底部会显示「已连接 supabase.com 项目：xxxx」，说明配置生效。
 
-### 第 7 步｜创建第一个管理员
+### 第 7 步｜创建第一个管理员（仅部署时做一次）
 
-1. 登录页点「首次部署？点这里创建第一个管理员账号」；
-2. 填 **11 位手机号 + 密码** → 创建账号（这个手机号就是以后的登录名）；
-3. 页面给出一条 SQL，复制到 **SQL Editor** 执行：
+登录页**没有任何自助注册入口** —— 页面是公开的，不能留这种后门。首个管理员在 Supabase 后台手工创建：
+
+1. **Authentication → Users → Add user**：邮箱填 `手机号@ledger.example.com`（域名换成你 `config.js` 里 `AUTH_DOMAIN` 的值），设好密码，勾选 **Auto Confirm User**（或已关闭 Confirm email）。
+2. **SQL Editor** 执行下面这句，把它提升为管理员：
 
    ```sql
-   update public.profiles set role = 'admin'
-    where phone = '13800138000';   -- 换成你的手机号
+   update public.profiles
+      set role = 'admin', phone = '13800138000', display_name = '管理员'
+    where id = (select id from auth.users where email = '13800138000@ledger.example.com');
    ```
 
-4. 回到登录页，用该手机号 + 密码登录，即拥有全部权限。
+   如果 `profiles` 里还没有这一行（注册触发器未建），先执行主脚本 `supabase_schema.sql` 再重试；仍没有就手工插一行：
 
-> 故意做成手工 SQL，而不是可调用的 `promote_admin()` 函数——否则任何人都能调用它给自己提权。
+   ```sql
+   insert into public.profiles (id, phone, display_name, role)
+   select id, '13800138000', '管理员', 'admin' from auth.users
+    where email = '13800138000@ledger.example.com';
+   ```
+
+3. 回到登录页，用该**手机号**（不用带 `@` 后缀）+ 密码登录，即拥有全部权限。
+
+> 故意做成手工 SQL，而不是可调用的 `promote_admin()` 函数 —— 否则任何人都能调用它给自己提权。
+> 之后日常开账号一律用管理员登录后工具栏的「＋ 新增客户经理 / ＋ 新增渠道用户」，**不要再走这一步**。
 
 ### 第 8 步｜管理员一键开人、开渠道
 
 登录后顶部工具栏：
 
 - **＋ 新增渠道**：填渠道名即可；可勾选「同时创建该渠道的登录账号」。
-- **＋ 新增客户经理**：从默认 4 人选或手填新姓名 + 手机号 + 初始密码 → 自动建账号并绑定角色。
-- **＋ 新增渠道用户**：选渠道 + 手机号 + 密码 → 建只读账号。
+- **＋ 新增客户经理**：从默认 4 人选或手填新姓名 + 手机号 → 自动建账号并绑定角色。
+- **＋ 新增渠道用户**：选渠道 + 手机号 → 建只读账号。
 - **＋ 新增签单**：渠道框可直接手输新渠道名，保存即自动入库。
 - **按渠道筛选**：拉指定渠道的全部明细。
 
-把 `登录名（手机号）+ 初始密码` 发给同事即可协作。
+### 团队账号约定（已内置进开户表单）
+
+| 角色 | 登录名 | 初始密码 | 表单表现 |
+|---|---|---|---|
+| 客户经理 | 本人 11 位手机号 | **同一个手机号** | 填手机号后密码框自动带出相同号码；手改过就不再跟随 |
+| 渠道用户 | 本人 11 位手机号 | **`888888`**（6 个八） | 密码框预填 888888（「新增渠道」里同时开户也一样） |
+| 管理员（主管） | 部署时设定的手机号 / 邮箱 | 部署时自设 | 首个管理员在 Supabase Dashboard 手工创建（登录页无注册入口） |
+
+密码框留空提交时，前端会按上表自动补齐，不会因漏填而开户失败；两个默认密码都 ≥ 6 位，满足 Supabase Auth 的最小长度。把 `手机号 + 密码` 发给同事即可协作；登录页直接填手机号，不用带 `@` 后缀。渠道账号是统一初始密码但**只能读自己渠道**，建议只发给对应渠道本人。
 
 ---
 
@@ -312,7 +346,7 @@ python3 -m http.server 8000
 - **域名**：`config.js` 的 `AUTH_DOMAIN` 留空即自动用默认值；若 supabase.com 报 `email_address_invalid`，改成你有 MX 记录的域名（如 `yourcompany.com`），**改完已建账号要重建**，全站必须一致。
 - **报错**：`Invalid login credentials` / `email_address_invalid` / `Failed to fetch` 都会附上针对 supabase.com 的具体排查提示。
 
-管理员开户弹窗仍要求 11 位手机号（要写进 `profiles.phone`），同事登录后可用手机号、邮箱或用户名登录。
+管理员开户弹窗仍要求 11 位手机号（要写进 `profiles.phone`），同事登录后可用手机号、邮箱或用户名登录。初始密码按第 8 步的「团队账号约定」由表单自动带出，主管可手动改。
 
 ---
 
@@ -321,7 +355,7 @@ python3 -m http.server 8000
 1. **渠道用户按 `渠道` 列、客户经理按 `客户经理` 列分别做行级过滤**，两个角色彻底拆开。
 2. **客户经理/录入人双重锁定**：表单 disabled + 数据库 `BEFORE INSERT/UPDATE` 触发器 `force_record_owner()` 强制写成本人。
 3. **规避 RLS 递归**：`auth_role()` / `auth_channel()` / `auth_manager()` 用 `SECURITY DEFINER` + 固定 `search_path`。
-4. **防注册提权**：公开注册开着，但 `user_invites` 只允许管理员写；注册触发器按邀请授角色，自行注册者只会得到看不到数据的空账号。
+4. **防注册提权**：登录页**没有任何自助注册入口**，前端还会兜底清空旧版缓存页面里残留的注册框。Supabase 公开注册之所以仍开着，是为了让管理员能一键开户，但 `user_invites` 只允许管理员写、注册触发器按邀请授角色；绕过前端自行注册的人只会拿到 `channel = null` 的空账号，看不到任何数据、也无法提权。
 5. **开户不顶掉管理员会话**：`signUp` 用独立客户端（`persistSession:false`、独立 `storageKey`），结束再 `setSession` 恢复。
 6. **渠道动态化**：`channels` 表 + 仅管理员可写的 RLS；前端下拉、筛选、录入候选全部由该表实时读取。
 7. **删除三段式**：管理员 `records_admin_all`（`for all` 含 delete）、客户经理 `records_manager_delete`（仅本人）、渠道用户无写策略；前端只对前两种角色渲染操作列，删除前还要过一次带单据摘要的确认弹窗。
@@ -382,4 +416,4 @@ python3 -m http.server 8000
 - `Publishable key` / `anon key` 可以放前端，但**所有表必须开 RLS**（脚本已开），密钥本身不是权限边界。
 - `sb_secret_...` / `service_role` 只在服务端使用，绝不写入 `config.js`。
 - 免费版项目长期不访问会暂停，正式使用建议升级套餐或保持定期访问。
-- 全员开户完成后，如需进一步收紧，可在 Authentication 关闭公开注册，之后由管理员用服务端密钥建号。
+- 全员开户完成后，如需进一步收紧，可在 Authentication 关闭公开注册，之后由管理员用服务端密钥建号。**注意**：关闭后前端工具栏的「＋ 新增客户经理 / ＋ 新增渠道用户」会一并失效（它们依赖 `signUp`），只适合人员固定、不再开新号的情况。
