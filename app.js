@@ -118,6 +118,12 @@
     if (/records_progress_ck|check constraint/i.test(m)) {
       return m + ' ｜ 当前进度选了「过户中」或「待放款」，但数据库的 CHECK 约束还是旧 6 档：请在 Supabase → SQL Editor 整段执行一次 supabase_patch_progress.sql（幂等），执行完直接重新点「保存」即可，不用刷新页面。';
     }
+    if (/admin_reset_password|could not find the function|schema cache|PGRST202/i.test(m)) {
+      return m + ' ｜「重置密码」依赖数据库函数 public.admin_reset_password：请在 Supabase → SQL Editor 整段执行一次 supabase_patch_password.sql（幂等，只加函数、不动数据），执行后刷新页面再试。';
+    }
+    if (/weak_password|weak password|password.*(too short|at least|6 char)/i.test(m)) {
+      return m + ' ｜ 新密码至少 6 位；若刚被主管重置过，初始密码是 888888。';
+    }
     if (/fetch|network|timeout|failed/i.test(m)) {
       return m + ' ｜ supabase.com 排查：① 免费项目是否被自动暂停（Dashboard 里点 Restore）；② URL 应为 https://<项目ID>.supabase.co，不是控制台网页地址；③ 浏览器能否访问该域名；④ 本平台没有 IP 白名单。';
     }
@@ -524,6 +530,9 @@
     var isAdmin = profile.role === 'admin';
     var isManager = profile.role === 'manager';
     $('#adminBtns').style.display = isAdmin ? 'inline' : 'none';
+    // 新增节点做空值保护：只更新了 app.js、页面还是旧版时不会整段报错
+    var accountsBtn = $('#btnAccounts');
+    if (accountsBtn) accountsBtn.style.display = isAdmin ? 'inline-block' : 'none';
     $('#btnNewRecord').style.display = (isAdmin || isManager) ? 'inline-block' : 'none';
     $('#chanWrap').style.display = isAdmin ? 'flex' : 'none';
     $('#readOnlyTip').style.display = profile.role === 'channel' ? 'block' : 'none';
@@ -657,7 +666,8 @@
     'f_contract_amount', 'f_loan_type', 'f_loan_amount', 'f_manager_name',
     'f_created_by', 'f_progress', 'f_missing_docs', 'f_settle_status', 'f_remark',
     'c_name', 'c_make_account', 'c_phone', 'c_pw',
-    'p_name', 'p_channel', 'p_phone', 'p_pw'
+    'p_name', 'p_channel', 'p_phone', 'p_pw',
+    'pw_new', 'pw_new2'
   ];
   var CHECKBOX_IDS = { c_make_account: 1 };
   var dirtyBaseline = {};      // 打开弹窗时各字段初始值
@@ -774,7 +784,7 @@
     if (modalVisible() && formDirty()) {
       return showConfirmDiscard(function () {
         closeModal();
-        openModal(title, html, onSubmit, submitText, formKey);
+        openModal(title, html, onSubmit, submitText, formKey, defaults);
       });
     }
     modalSeq++;
@@ -1101,6 +1111,153 @@
     return true;
   }
 
+  // ---------------------------------------------------------------- 密码管理
+  // 自己改密码：GoTrue 的 auth.updateUser 只作用于当前会话用户，纯前端即可。
+  // 主管重置他人：必须走数据库 SECURITY DEFINER 函数（public.admin_reset_password）。
+  //   浏览器端的 auth.admin.updateUserById 需要 service_role 密钥 —— 那把钥匙
+  //   绝不能放进公开前端，所以由数据库函数内二次校验 admin 后代写 auth.users。
+  var accountsCache = [];
+  var pendingReset = null;
+
+  function rawV(id) { var e = $('#' + id); return e ? String(e.value || '') : ''; }
+
+  function openChangePassword() {
+    var h = '<div class="note">修改后即时生效，当前登录状态不会中断。<b>只有你自己</b>能改自己的密码，主管也看不到你设的新密码。</div>' +
+      '<div class="grid" style="margin-top:16px">' +
+        fld('新密码 *', inp('pw_new', '', 'password', 'autocomplete="new-password" placeholder="至少 6 位"')) +
+        fld('确认新密码 *', inp('pw_new2', '', 'password', 'autocomplete="new-password" placeholder="再输一次"')) +
+      '</div>';
+    openModal('修改我的密码', h, async function () {
+      var a = rawV('pw_new'), b = rawV('pw_new2');
+      if (a.length < 6) return toast('新密码至少 6 位', 'err');
+      if (a !== b) return toast('两次输入的新密码不一致', 'err');
+      if (!db || !db.auth || typeof db.auth.updateUser !== 'function') {
+        return toast('当前客户端不支持修改密码，请更新 vendor/supabase-js.umd.min.js', 'err');
+      }
+      var r = await db.auth.updateUser({ password: a });
+      if (r.error) return toast(netHint(r.error), 'err');
+      closeModal();
+      toast('密码已修改，下次登录请用新密码');
+    }, '确认修改', 'password:self');
+  }
+
+  async function openAccounts() {
+    if (!profile || profile.role !== 'admin') return toast('只有主管可以管理账号', 'err');
+    pendingReset = null;
+    var h = '<div class="acct-tools">' +
+        inp('acctKw', '', 'text', 'placeholder="搜索手机号 / 姓名 / 渠道"') +
+        '<span class="muted small" id="acctCount"></span></div>' +
+      '<div id="acctList" style="max-height:44vh;overflow:auto">正在读取账号列表…</div>' +
+      '<div id="acctConfirm" style="display:none;margin-top:12px"></div>' +
+      '<div class="note">重置后该账号密码统一变为 <b>888888</b>（6 个八），请通知本人尽快用顶部「修改密码」改成自己的。<br>' +
+        '不能重置自己的密码；此操作不改角色、不改绑定范围，也不动任何台账数据。</div>';
+    openModal('账号管理 · 重置密码', h, function () { closeModal(); }, '关闭', '');
+
+    var kw = $('#acctKw');
+    if (kw) kw.oninput = function () { renderAcctList(String(kw.value || '')); };
+
+    var r;
+    try {
+      r = await db.from('profiles')
+        .select('id,phone,display_name,role,channel,manager_name')
+        .order('role').order('phone');
+    } catch (e) {
+      var eb = $('#acctList');
+      if (eb) eb.innerHTML = '<div class="muted small" style="padding:20px;text-align:center">读取失败：' + esc(netHint(e)) + '</div>';
+      return;
+    }
+    if (r.error) {
+      var fb = $('#acctList');
+      if (fb) fb.innerHTML = '<div class="muted small" style="padding:20px;text-align:center">读取失败：' + esc(netHint(r.error)) + '</div>';
+      return;
+    }
+    accountsCache = Array.isArray(r.data) ? r.data : [];
+    renderAcctList('');
+  }
+
+  function renderAcctList(kw) {
+    var box = $('#acctList');
+    if (!box) return;
+    var k = String(kw || '').trim().toLowerCase();
+    var shown = accountsCache.filter(function (u) {
+      if (!k) return true;
+      return [u.phone, u.display_name, u.role, ROLE_LABEL[u.role], u.channel, u.manager_name]
+        .some(function (x) { return String(x || '').toLowerCase().indexOf(k) >= 0; });
+    });
+    var cnt = $('#acctCount');
+    if (cnt) cnt.textContent = '共 ' + accountsCache.length + ' 个账号' +
+      (k ? ' · 匹配 ' + shown.length + ' 个' : '');
+    if (!shown.length) {
+      box.innerHTML = '<div class="muted small" style="padding:22px;text-align:center">没有匹配的账号</div>';
+      return;
+    }
+    var h = '<table class="acct-tb"><thead><tr><th>登录名</th><th>显示名</th><th>角色</th>' +
+      '<th>绑定范围</th><th style="text-align:right">操作</th></tr></thead><tbody>';
+    shown.forEach(function (u, i) {
+      var self = !!(me && u.id === me.id);
+      var bind = u.role === 'channel' ? (u.channel || '—')
+               : u.role === 'manager' ? (u.manager_name || '—') : '全部数据';
+      h += '<tr><td class="mono">' + esc(u.phone || u.id) + '</td>' +
+        '<td>' + esc(u.display_name || '—') + '</td>' +
+        '<td><span class="tag r-' + esc(u.role) + '">' + esc(ROLE_LABEL[u.role] || u.role) + '</span></td>' +
+        '<td>' + esc(bind) + '</td>' +
+        '<td style="text-align:right">' + (self
+          ? '<span class="self">本人 · 请用「修改密码」</span>'
+          : '<button class="mini danger" id="rst_' + i + '">重置为 888888</button>') + '</td></tr>';
+    });
+    h += '</tbody></table>';
+    box.innerHTML = h;
+    shown.forEach(function (u, i) {
+      if (me && u.id === me.id) return;
+      var b = $('#rst_' + i);
+      if (b) b.onclick = function () { showResetConfirm(u); };
+    });
+  }
+
+  function clearResetConfirm() {
+    pendingReset = null;
+    var box = $('#acctConfirm');
+    if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+  }
+
+  function showResetConfirm(u) {
+    var box = $('#acctConfirm');
+    if (!box) return;
+    pendingReset = u;
+    box.innerHTML = '<div style="border:1px solid #E7C7BF;border-left:3px solid var(--accent);' +
+      'padding:12px 14px;background:#FBF0EE">' +
+      '<div style="font-weight:700;color:#8C2F21;margin-bottom:6px">确认重置这个账号的密码？</div>' +
+      '<div class="small" style="line-height:1.85;color:#4A5560">登录名 <b>' + esc(u.phone || u.id) +
+        '</b> · ' + esc(ROLE_LABEL[u.role] || u.role) +
+        '<br>重置后密码为 <b>888888</b>，下次登录生效；角色与台账数据不变。</div>' +
+      '<div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">' +
+        '<button class="mini" id="rstCancel">取消</button>' +
+        '<button class="mini" id="rstGo" style="background:var(--accent);border-color:var(--accent);color:#fff">确认重置</button>' +
+      '</div></div>';
+    box.style.display = 'block';
+    var cancel = $('#rstCancel'), go = $('#rstGo');
+    if (cancel) cancel.onclick = clearResetConfirm;
+    if (go) go.onclick = doResetPassword;
+  }
+
+  async function doResetPassword() {
+    var u = pendingReset;
+    if (!u) return;
+    if (!db || typeof db.rpc !== 'function') {
+      return toast('当前客户端不支持重置，请更新 vendor/supabase-js.umd.min.js', 'err');
+    }
+    var go = $('#rstGo');
+    if (go) go.disabled = true;
+    var r = await db.rpc('admin_reset_password', { p_target: u.id });
+    if (r.error) {
+      if (go) go.disabled = false;
+      return toast(netHint(r.error), 'err');
+    }
+    var label = u.display_name || u.phone || u.id;
+    clearResetConfirm();
+    toast('已把「' + label + '」的密码重置为 888888，请通知本人尽快修改');
+  }
+
   // ---------------------------------------------------------------- 导出 CSV
   function exportCsv() {
     // viewRows 已按当前排序排好，导出的 CSV 行序与屏幕所见完全一致
@@ -1151,6 +1308,9 @@
     };
     // 新增 DOM 节点做空值保护：只更新了 app.js、index.html 还是旧版时也不会整段报错
     var on = function (sel, fn) { var el = $(sel); if (el) el.onclick = fn; };
+    // 密码管理（旧版 index.html 没有这两个按钮时，on() 会安全跳过）
+    on('#btnChangePw', openChangePassword);
+    on('#btnAccounts', openAccounts);
     // 关闭弹窗一律先过「未保存确认」；确认层三个按钮都只操作独立层，不动表单
     on('#modalClose', requestCloseModal);
     on('#modalCancel', requestCloseModal);
