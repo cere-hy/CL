@@ -63,12 +63,10 @@
   .muted{color:var(--muted)} .small{font-size:12px}
   hr{border:0;border-top:1px solid var(--hairline);margin:14px 0}
 
-  /* ── 登录：左红色品牌区 + 右白色表单（毛玻璃卡片） ───────────────── */
+  /* ── 登录（做减法）：红头 + 红按钮；全页仅 19 / 16 / 13 / 11 四级字号 ── */
   #loginView{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;
     padding:clamp(16px,4vw,56px);
-    background:radial-gradient(52vw 60vh at 12% 8%,rgba(196,18,48,.16),transparent 60%),
-               radial-gradient(46vw 55vh at 92% 88%,rgba(0,113,227,.12),transparent 62%),
-               var(--bg)}
+    background:radial-gradient(52vw 60vh at 12% 8%,rgba(196,18,48,.14),transparent 60%),var(--bg)}
   .login-shell{width:100%;max-width:940px;display:grid;grid-template-columns:.92fr 1.08fr;
     background:rgba(255,255,255,.72);border-radius:22px;position:relative;overflow:hidden;
     box-shadow:0 24px 80px rgba(0,0,0,.16);
@@ -76,38 +74,29 @@
   @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
     .login-shell{background:var(--paper)}
   }
-  .login-brand{background:linear-gradient(165deg,#D01F33,#8E0E24);color:#F5F5F7;
-    padding:clamp(30px,4vw,50px);display:flex;flex-direction:column;position:relative}
-  .login-brand::after{content:"";position:absolute;inset:16px;border:1px solid rgba(255,255,255,.10);
-    pointer-events:none;border-radius:12px}
-  .seal{width:48px;height:48px;border:1.5px solid rgba(255,255,255,.35);color:#fff;
-    display:grid;place-items:center;font-size:14px;font-weight:700;letter-spacing:.1em;
-    border-radius:50%;margin-bottom:auto}
-  .brand-kicker{font-size:10px;letter-spacing:.26em;color:rgba(255,255,255,.68);margin:26px 0 8px;text-transform:uppercase}
-  .login-brand h1{font-size:clamp(28px,3.3vw,38px);line-height:1.25;
-    letter-spacing:-.02em;margin:0 0 18px;font-weight:700}
-  .brand-desc{font-size:13px;line-height:1.9;color:rgba(255,255,255,.82);margin:0}
-  .brand-rule{height:1px;background:rgba(255,255,255,.28);margin:26px 0 14px}
-  .brand-foot{font-size:11px;color:rgba(255,255,255,.68);letter-spacing:.06em;margin:0}
-  .login-panel{padding:clamp(30px,4vw,50px);display:flex;flex-direction:column;justify-content:center}
-  .eyebrow{font-size:10px;letter-spacing:.24em;color:var(--navy);font-weight:700}
-  .login-panel h2{font-size:26px;margin:10px 0 6px;font-weight:700;letter-spacing:-.02em}
-  .login-panel .lead{font-size:13px;color:var(--muted);margin:0 0 28px}
-  .login-panel label{display:block;margin-bottom:18px;font-size:12px}
-  .login-panel label span{display:block;margin-bottom:7px;color:#3A3A3C;font-weight:600;letter-spacing:.02em}
-  .login-panel input{background:#F2F2F7;border:1px solid transparent;border-radius:var(--r-input);
-    padding:11px 14px;font-size:15px}
-  .login-panel input:focus{background:#fff;border-color:var(--navy);
-    box-shadow:0 0 0 3px rgba(0,113,227,.15)}
+  .login-brand{background:linear-gradient(165deg,#D01F33,#8E0E24);color:#fff;
+    padding:24px;display:flex;flex-direction:column;justify-content:center}
+  .login-brand h1{font-size:19px;line-height:1.4;letter-spacing:0;
+    margin:0 0 8px;font-weight:700}
+  .brand-desc{font-size:13px;line-height:1.6;color:rgba(255,255,255,.82);margin:0}
+  .login-panel{padding:24px;display:flex;flex-direction:column;justify-content:center}
+  .login-panel .lead{font-size:13px;color:var(--muted);margin:0 0 24px}
+  .login-panel label{display:block;margin-bottom:8px;font-size:16px}
+  .login-panel label span{display:block;margin-bottom:8px;color:#3A3A3C;font-weight:500}
+  .login-panel input{height:46px;padding:0 14px;font-size:16px;color:var(--ink);
+    background:#F2F2F7;border:1px solid transparent;border-radius:10px}
+  .login-panel input::placeholder{color:#AEAEB2;opacity:1}
+  .login-panel input:focus{background:#fff;border-color:#9E1B2F;
+    box-shadow:0 0 0 3px rgba(158,27,47,.12)}
   /* 登录页专用按钮：暗红呼应品牌区，精致长方形（其余 .btn-p 不变） */
-  .login-panel .btn-p{width:100%;padding:10px 18px;margin-top:8px;min-height:42px;
-    background:#9E1B2F;color:#fff;font-size:15px;font-weight:500;letter-spacing:0;
+  .login-panel .btn-p{width:100%;height:46px;padding:0 18px;margin-top:0;
+    background:#9E1B2F;color:#fff;font-size:16px;font-weight:500;letter-spacing:0;
     border-radius:10px}
   .login-panel .btn-p:hover{background:#871426;color:#fff}
   .login-panel .btn-p:active{background:#76121F;opacity:1}
   .login-panel .btn-p:disabled{background:#E8E8ED;color:var(--text-3);transform:none}
-  .login-meta{margin-top:20px;font-size:11.5px;line-height:1.9;color:var(--muted);text-align:center}
-  .login-meta b{color:var(--ink);font-weight:600}
+  .login-panel .btn-p:focus-visible{outline:2px solid rgba(158,27,47,.45);outline-offset:2px}
+  .login-meta{margin-top:24px;font-size:11px;line-height:1.6;color:var(--text-3);text-align:center}
   .warn,.ok{border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.75;margin-top:14px}
   .warn{background:rgba(255,149,0,.12);color:#B25000}
   .ok{background:rgba(52,199,89,.14);color:#1E8E3E}
@@ -310,8 +299,6 @@
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
   @media (max-width:820px){
     .login-shell{grid-template-columns:1fr}
-    .login-brand{padding:28px}.login-brand h1{font-size:28px}.seal{margin-bottom:6px}
-    .brand-kicker{margin-top:18px}.brand-rule{margin:18px 0 10px}
     .card{flex:1 1 45%}
     .sortbar .shint,.pcur{margin-left:0;width:100%}
     .grid{grid-template-columns:1fr}
@@ -325,30 +312,9 @@
   @media (max-width:768px){
     body{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
 
-    /* ── 登录页：一屏放下（压缩品牌区与表单留白） ── */
-    #loginView{padding:10px;align-items:center}
+    /* ── 登录页：一屏放下（沿用全局 19/16/13/11 字号与 8/24 间距） ── */
+    #loginView{padding:8px;align-items:center}
     .login-shell{border-radius:18px;box-shadow:0 12px 44px rgba(0,0,0,.16)}
-    .login-brand{padding:14px 16px 12px}
-    .login-brand::after{inset:7px;border-radius:8px}
-    .seal{width:34px;height:34px;font-size:11px;border-width:1.2px;margin-bottom:0;
-          position:absolute;top:16px;right:16px}
-    .brand-kicker{margin:2px 0 3px;font-size:9px;letter-spacing:.2em}
-    .login-brand h1{font-size:19px;line-height:1.3;margin:0 0 6px}
-    .brand-desc{font-size:11.5px;line-height:1.65}
-    .brand-rule{margin:8px 0 6px}
-    .brand-foot{font-size:10px}
-    .login-panel{padding:16px 18px 20px}
-    .login-panel h2{font-size:21px;margin:6px 0 4px}
-    .login-panel .lead{font-size:12.5px;margin:0 0 14px}
-    .login-panel label{margin-bottom:11px}
-    .login-panel input{padding:10px 13px}
-    .login-panel .btn-p{padding:10px;margin-top:6px}
-    .login-meta{margin-top:11px;font-size:10.5px;line-height:1.7}
-    @media (max-height:700px){
-      .brand-rule,.brand-foot{display:none}
-      .login-panel label{margin-bottom:9px}
-      .login-meta{margin-top:8px}
-    }
 
     /* ── 顶栏：毛玻璃一行 ≤56px ── */
     header{position:sticky;top:0;z-index:40;flex-wrap:nowrap;gap:8px;
@@ -499,8 +465,6 @@
     .del-input{padding:8px 16px 4px}
     .del-input input{font-size:16px;min-height:42px}
 
-    .login-panel input{font-size:16px}
-
     #toast{left:12px;right:12px;max-width:none;
       bottom:calc(88px + env(safe-area-inset-bottom))}
     .foot{font-size:10.5px}
@@ -513,27 +477,17 @@
 <div id="loginView">
   <div class="login-shell">
     <aside class="login-brand">
-      <div class="seal">台账</div>
-      <p class="brand-kicker">Ledger &nbsp;/&nbsp; No. 2026</p>
-      <h1>客户汇总<br>清单台账</h1>
+      <h1>客户汇总清单台账</h1>
       <p class="brand-desc">签约 · 进度 · 过户 · 放款 · 结账<br>一处登记，全员同步</p>
-      <div class="brand-rule"></div>
-      <p class="brand-foot">多人协作版 &nbsp;·&nbsp; supabase.com</p>
     </aside>
     <section class="login-panel">
-      <span class="eyebrow">SIGN IN</span>
-      <h2>欢迎回来</h2>
       <p class="lead">请使用主管开通的账号登录</p>
       <div id="loginBox">
-        <label><span>登录名</span><input id="loginPhone" type="text" placeholder="手机号 / 邮箱 / 用户名" autocomplete="username"></label>
+        <label><span>登录名</span><input id="loginPhone" type="text" placeholder="手机号或用户名" autocomplete="username"></label>
         <label><span>密码</span><input id="loginPw" type="password" placeholder="密码" autocomplete="current-password"></label>
         <button id="btnLogin" class="btn-p">登录</button>
       </div>
-      <div class="login-meta" id="projInfo"></div>
-      <div class="login-meta">
-        手机号自动映射为后台账号，<b>无需带 @ 后缀</b><br>
-        <b>账号由主管统一开通</b>，没有账号请联系管理员
-      </div>
+      <div class="login-meta">账号由主管统一开通 · 手机号登录无需@后缀 · 无账号请联系管理员</div>
       <!-- 安全：登录页不提供任何自助注册入口；首个管理员只能在 Supabase Dashboard 手工创建。
            下面三个空节点仅用于兼容浏览器缓存的旧版 app.js（旧脚本会给它们绑 onclick），
            无内容、不可见、不可点击：既不会抛错，也不会暴露注册能力。 -->
