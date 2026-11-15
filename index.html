@@ -593,5 +593,21 @@
   });
 })();
 </script>
+
+<!-- 移动端表格横向滚动归位：手机浏览器刷新时会恢复上次的横向滚动位置，
+     导致首屏表格停在"半截列"状态（第二列签约日期滑进固定首列下面）。
+     每次表格重绘 / 页面回显后把横向滚动归到最左，仅 ≤768px 生效，PC 不受影响。
+     纯观感逻辑，不读写任何业务数据。 -->
+<script>
+(function () {
+  var box = document.querySelector('.tablebox'), body = document.getElementById('tblBody');
+  if (!box || !body) return;
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  var mq = window.matchMedia('(max-width:768px)');
+  function home() { if (mq.matches) box.scrollLeft = 0; }
+  new MutationObserver(home).observe(body, { childList: true });
+  window.addEventListener('pageshow', home);
+})();
+</script>
 </body>
 </html>
