@@ -621,19 +621,33 @@
 
   function renderTable() {
     var canEdit = profile.role === 'admin' || profile.role === 'manager';
-    var head = COLUMNS.map(function (c) { return '<th>' + esc(c.n) + '</th>'; }).join('') +
+    var isMobile = (typeof window.matchMedia === 'function') && window.matchMedia('(max-width:768px)').matches;
+    // 手机端列序：业务编号从第一列挪到操作列前；客户姓名加 pin-l 固定在左（CSS 生效）。
+    // PC 端永远走 COLUMNS 原始顺序，渲染结果与旧版逐像素一致。
+    var cols = COLUMNS.slice();
+    if (isMobile) {
+      cols = cols.filter(function (c) { return c.k !== 'biz_no'; });
+      cols.push(COLUMNS[0]);   // COLUMNS[0] = 业务编号，紧挨「操作」列
+    }
+    var pinCls = function (c) { return isMobile && c.k === 'customer_name' ? 'pin-l ' : ''; };
+    var head = cols.map(function (c) {
+      return '<th class="' + pinCls(c) + '">' + esc(c.n) + '</th>';
+    }).join('') +
       (canEdit ? '<th id="thAction">操作</th>' : '');
     var body = viewRows.map(function (row) {
-      var tds = COLUMNS.map(function (c) {
+      var tds = cols.map(function (c) {
         var v = row[c.k];
         var txt = c.num && v !== null && v !== undefined ? Number(v).toFixed(2) : (v === null || v === undefined ? '' : v);
-        return '<td class="' + (c.wide ? 'wide ' : '') + (c.num ? 'num ' : '') + cellClass(c, v) + '">' + esc(txt) + '</td>';
+        return '<td class="' + pinCls(c) + (c.wide ? 'wide ' : '') + (c.num ? 'num ' : '') + cellClass(c, v) + '">' + esc(txt) + '</td>';
       }).join('');
       if (canEdit) {
-        tds += '<td class="act">' +
-          '<button class="mini" data-edit="' + row.id + '">编辑</button> ' +
-          '<button class="mini danger" data-del="' + row.id + '">删除</button>' +
-          '</td>';
+        tds += isMobile
+          // 手机端：操作列只留 ✏️ 图标；删除入口移入编辑弹窗左下角（强确认），防误触
+          ? '<td class="act"><button class="mini iconbtn" data-edit="' + row.id + '" aria-label="编辑" title="编辑">✏️</button></td>'
+          : '<td class="act">' +
+            '<button class="mini" data-edit="' + row.id + '">编辑</button> ' +
+            '<button class="mini danger" data-del="' + row.id + '">删除</button>' +
+            '</td>';
       }
       return '<tr>' + tds + '</tr>';
     }).join('');
@@ -647,6 +661,17 @@
       b.onclick = function () { confirmDelete(Number(b.getAttribute('data-del'))); };
     });
   }
+
+  // 手机 / PC 断点切换（旋转屏、拉窗口）时重绘一次，列序与固定列随视口正确切换。
+  // 仅影响渲染，不触发任何数据请求。
+  try {
+    var _rerender = function () { if (typeof renderTable === 'function') renderTable(); };
+    if (window.matchMedia) {
+      var _mq = window.matchMedia('(max-width:768px)');
+      if (_mq.addEventListener) _mq.addEventListener('change', _rerender);
+      else if (_mq.addListener) _mq.addListener(_rerender);
+    }
+  } catch (e) {}
 
   // ---------------------------------------------------------------- 弹窗
   var modalSeq = 0;   // 弹窗序号：异步取编号回来时，避免写进已经关掉/换掉的弹窗
@@ -795,6 +820,9 @@
     $('#modalSubmit').className = 'btn-p';
     $('#modal').style.display = 'flex';
     hideConfirm();
+    // 「删除此单」入口默认隐藏，只有手机端的编辑签单弹窗会打开它（见 openRecord）
+    var delBtn0 = $('#modalDelBtn');
+    if (delBtn0) delBtn0.style.display = 'none';
 
     // 表单默认值（如渠道账号初始密码 888888）显式赋值，不依赖 HTML value 属性解析；
     // 放在草稿恢复之前，草稿仍能覆盖默认值；两者都在 snapshotForm() 之前，不会误判为「已改动」
@@ -866,6 +894,60 @@
       await loadRecords();
     }, '确认删除');
     $('#modalSubmit').className = 'btn-p btn-danger';
+  }
+
+  // ---- 手机端删除：编辑弹窗左下角「删除此单」→ 强确认层（必须手输「删除」两字）----
+  // 权限与 RLS 约束与 confirmDelete 完全一致；纯 UI 流程不同，不改任何数据逻辑。
+  var delRow = null;   // 当前待删除的行；null = 强确认层未打开
+  function delLayerVisible() {
+    var el = $('#delLayer');
+    return !!el && el.style.display === 'flex';
+  }
+  function closeDelConfirm() {
+    var el = $('#delLayer');
+    if (el) el.style.display = 'none';
+    delRow = null;
+  }
+  function openDelConfirm(row) {
+    delRow = row;
+    var facts = [
+      ['业务编号', row.biz_no], ['签约日期', row.sign_date], ['客户姓名', row.customer_name],
+      ['渠道', row.channel], ['客户经理', row.manager_name],
+      ['当前进度', row.progress], ['结账状态', row.settle_status]
+    ];
+    var summary = facts.map(function (p) {
+      return '<div class="dline"><span>' + esc(p[0]) + '</span><b>' + esc(p[1] || '\u2014') + '</b></div>';
+    }).join('');
+    var box = $('#delText');
+    if (box) box.innerHTML =
+      '<p>即将删除这条签单，<b>删除后不可恢复</b>，看板统计与 CSV 导出也会同步移除。</p>' +
+      '<div class="dsum">' + summary + '</div>' +
+      '<p class="muted small">若只是拒单 / 终止业务、希望保留业务痕迹，请点「取消」，改在编辑里把「当前进度」设为「已终止」。</p>';
+    var inp = $('#delInput'), btn = $('#delConfirm');
+    if (!inp || !btn) return;   // 旧版页面没有强确认层时安全跳过
+    inp.value = '';
+    btn.disabled = true;
+    $('#delLayer').style.display = 'flex';
+    inp.oninput = function () { btn.disabled = this.value.trim() !== '删除'; };
+    setTimeout(function () { try { inp.focus(); } catch (e) {} }, 80);
+  }
+  async function doDelConfirmed() {
+    if (!delRow) return closeDelConfirm();
+    var row = delRow;
+    var btn = $('#delConfirm');
+    if (btn) btn.disabled = true;
+    var r = await db.from('records').delete().eq('id', row.id);
+    if (r.error) {
+      closeDelConfirm();
+      return toast('删除失败：' + netHint(r.error) +
+        (profile.role === 'manager'
+          ? ' ｜ 客户经理删除需在 SQL Editor 执行 supabase_patch_delete.sql 补上 RLS 策略'
+          : ''), 'err');
+    }
+    closeDelConfirm();
+    closeModal();   // 签单已删除，编辑弹窗一并关闭
+    toast('已删除签单 ' + (row.biz_no || ('#' + row.id)));
+    await loadRecords();
   }
 
   // ---------------------------------------------------------------- 台账录入 / 编辑
@@ -965,6 +1047,19 @@
       }
       await loadRecords();
     }, '保存', (isNew ? 'record:new' : 'record:' + id));
+
+    // 手机端：删除入口收进编辑弹窗左下角（桌面端仍用列表行内「删除」按钮）
+    var delBtn = $('#modalDelBtn');
+    if (delBtn) {
+      var canDel = profile.role === 'admin' || profile.role === 'manager';
+      var mobileNow = (typeof window.matchMedia === 'function') && window.matchMedia('(max-width:768px)').matches;
+      if (!isNew && mobileNow && canDel) {
+        delBtn.style.display = '';
+        delBtn.onclick = function () { openDelConfirm(row); };
+      } else {
+        delBtn.style.display = 'none';
+      }
+    }
 
     // 新增：一打开弹窗就向数据库取号，期间禁用「保存」，取到后填进只读框
     if (isNew) {
@@ -1324,6 +1419,10 @@
     });
     // 确认层点遮罩 = 继续编辑（最安全的默认，不会误丢数据）
     on('#confirmLayer', function (e) { if (e && e.target === this) hideConfirm(); });
+    // 删除强确认层：取消 / 点遮罩 = 关闭；「确认删除」按钮本身由输入校验控制 disabled
+    on('#delCancel', closeDelConfirm);
+    on('#delConfirm', doDelConfirmed);
+    on('#delLayer', function (e) { if (e && e.target === this) closeDelConfirm(); });
     watchDirty();
     // 刷新 / 关闭标签页时也兜一道（浏览器原生提示，文案由浏览器决定）
     if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
@@ -1373,6 +1472,7 @@
     document.addEventListener('keydown', function (e) {
       if (!e || e.key !== 'Escape') return;
       if (confirmVisible()) return hideConfirm();      // Esc = 继续编辑（最安全）
+      if (delLayerVisible()) return closeDelConfirm(); // 删除强确认层最上层，先关它
       if (modalVisible()) return requestCloseModal();  // 弹窗 Esc 也要过未保存确认
       closePop();
     });
