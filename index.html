@@ -99,7 +99,13 @@
     padding:11px 14px;font-size:15px}
   .login-panel input:focus{background:#fff;border-color:var(--navy);
     box-shadow:0 0 0 3px rgba(0,113,227,.15)}
-  .login-panel .btn-p{width:100%;padding:12px;margin-top:8px;font-size:15px;letter-spacing:.06em}
+  /* 登录页专用按钮：暗红呼应品牌区，精致长方形（其余 .btn-p 不变） */
+  .login-panel .btn-p{width:100%;padding:10px 18px;margin-top:8px;min-height:42px;
+    background:#9E1B2F;color:#fff;font-size:15px;font-weight:500;letter-spacing:0;
+    border-radius:10px}
+  .login-panel .btn-p:hover{background:#871426;color:#fff}
+  .login-panel .btn-p:active{background:#76121F;opacity:1}
+  .login-panel .btn-p:disabled{background:#E8E8ED;color:var(--text-3);transform:none}
   .login-meta{margin-top:20px;font-size:11.5px;line-height:1.9;color:var(--muted);text-align:center}
   .login-meta b{color:var(--ink);font-weight:600}
   .warn,.ok{border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.75;margin-top:14px}
@@ -336,7 +342,7 @@
     .login-panel .lead{font-size:12.5px;margin:0 0 14px}
     .login-panel label{margin-bottom:11px}
     .login-panel input{padding:10px 13px}
-    .login-panel .btn-p{padding:12px;margin-top:6px}
+    .login-panel .btn-p{padding:10px;margin-top:6px}
     .login-meta{margin-top:11px;font-size:10.5px;line-height:1.7}
     @media (max-height:700px){
       .brand-rule,.brand-foot{display:none}
@@ -521,7 +527,7 @@
       <div id="loginBox">
         <label><span>登录名</span><input id="loginPhone" type="text" placeholder="手机号 / 邮箱 / 用户名" autocomplete="username"></label>
         <label><span>密码</span><input id="loginPw" type="password" placeholder="密码" autocomplete="current-password"></label>
-        <button id="btnLogin" class="btn-p">登 录</button>
+        <button id="btnLogin" class="btn-p">登录</button>
       </div>
       <div class="login-meta" id="projInfo"></div>
       <div class="login-meta">
