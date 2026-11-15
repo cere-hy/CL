@@ -89,6 +89,9 @@
   .issue{font-size:10px;letter-spacing:.18em;color:var(--muted);border-left:1px solid var(--line);padding-left:12px}
   #who{font-size:12.5px;color:var(--ink);margin-left:6px}
   header .grow{flex:1}
+  /* 顶栏按钮组：PC 用 contents 让按钮与旧版布局逐像素一致；≡ 仅手机显示 */
+  .navmenu{display:contents}
+  #navBurger{display:none}
   .badge{display:inline-block;padding:2px 9px;border-radius:2px;font-size:10.5px;font-weight:700;
     margin:0 5px;letter-spacing:.05em}
   .r-admin{background:#E5EBF0;color:var(--navy-deep)} .r-manager{background:#EAF0E4;color:#47632F}
@@ -251,6 +254,148 @@
     .grid{grid-template-columns:1fr}
     .issue{display:none}
   }
+
+  /* ══════════════════════════════════════════════════════════════════
+     移动端深度适配（≤768px）—— 只改观感与摆放，不改任何 id / 事件 / 业务逻辑
+     PC（>768px）完全不受本段影响。
+     表格结构说明：表头吸顶与首列/操作列固定均相对于 .tablebox 滚动容器生效
+     （容器纵横双向滚动；Chromium / iOS Safari 实测 sticky 同时生效）。
+     ══════════════════════════════════════════════════════════════════ */
+  @media (max-width:768px){
+    body{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+
+    /* ── 顶栏：一行 ≤56px，右侧用户徽标 + ≡ ── */
+    header{position:sticky;top:0;z-index:40;flex-wrap:nowrap;gap:8px;
+           padding:8px 12px;min-height:48px;box-shadow:0 2px 10px rgba(30,43,56,.08)}
+    header .logo{font-size:15px;letter-spacing:.02em;white-space:nowrap;flex:none}
+    .issue{display:none}
+    #who{margin-left:0;max-width:34vw;overflow:hidden;text-overflow:ellipsis;
+         white-space:nowrap;flex:none;font-size:12px}
+    #navBurger{display:block;flex:none;width:42px;height:42px;padding:0;border:0;
+      background:transparent;color:var(--navy);font-size:22px;line-height:1;border-radius:8px}
+    #navBurger:active{background:#E6EDF2}
+    .navmenu{display:none;position:absolute;top:calc(100% + 6px);right:10px;z-index:45;
+      flex-direction:column;gap:2px;min-width:152px;padding:8px;
+      background:var(--paper);border:1px solid var(--line);border-radius:10px;
+      box-shadow:0 14px 40px rgba(20,32,45,.28)}
+    .navmenu.open{display:flex}
+    .navmenu button{display:block;width:100%;text-align:left;border:0;background:transparent;
+      padding:10px 14px;font-size:14px;border-radius:8px;min-height:42px}
+    .navmenu button:active{background:#EFECE3}
+    #btnLogout{color:var(--accent);font-weight:700}
+
+    .wrap{padding:10px 10px 96px}
+
+    /* ── 统计区间：一行横向滑动的胶囊（隐藏滚动条） ── */
+    .periodbar{flex-wrap:nowrap;overflow-x:auto;gap:7px;padding:8px 10px;margin-bottom:9px;
+      scrollbar-width:none}
+    .periodbar::-webkit-scrollbar{display:none}
+    .periodbar .plabel,.periodbar .psep{display:none}
+    .periodbar .chip,.periodbar .pbtn{flex:none;min-height:36px;padding:6px 13px}
+    .pcur{margin-left:0;flex:none;font-size:10.5px}
+    /* 月份/区间面板改为底部抽屉（父级 overflow 会裁剪 absolute 弹层） */
+    .pop{position:fixed;left:10px;right:10px;top:auto;bottom:calc(10px + env(safe-area-inset-bottom));
+      width:auto;max-width:none;max-height:70vh;overflow:auto;z-index:70;padding:14px}
+    .mgrid{grid-template-columns:repeat(4,1fr)}
+
+    /* ── KPI：紧凑网格，金额过长省略 ── */
+    #kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(76px,1fr));margin-bottom:10px}
+    .card{min-width:0;padding:8px 10px}
+    .card span{font-size:10px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .card b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+    .tip{padding:8px 12px;font-size:12px;margin-bottom:9px}
+
+    /* ── 工具栏压缩；新增签单 → 右下角 FAB（同一按钮，仅换摆放） ── */
+    .toolbar{gap:7px;padding:8px 10px;margin-bottom:9px}
+    .toolbar .sep{display:none}
+    #btnNewRecord{position:fixed;right:calc(14px + env(safe-area-inset-right));
+      bottom:calc(20px + env(safe-area-inset-bottom));z-index:45;
+      width:56px;height:56px;padding:0;border-radius:50%;font-size:0;line-height:54px;
+      text-align:center;color:#fff;background:var(--navy);border-color:var(--navy);
+      box-shadow:0 8px 22px rgba(27,52,72,.42)}
+    #btnNewRecord::after{content:"＋";font-size:26px;font-weight:600}
+    #btnNewRecord:active{transform:scale(.94);opacity:1}
+    .toolbar label{font-size:12px}
+    .toolbar select,.toolbar input[type=text]{min-width:96px;min-height:38px;
+      font-size:16px;padding:5px 9px}
+    #count{flex-basis:100%}
+
+    /* ── 排序条：一行，说明文字收为一行小字 ── */
+    .sortbar{flex-wrap:nowrap;overflow-x:auto;padding:7px 10px;margin-bottom:9px;
+      scrollbar-width:none}
+    .sortbar::-webkit-scrollbar{display:none}
+    .sortbar .ssep{display:none}
+    .sortbar .slabel{flex:none;white-space:nowrap}
+    .sortbar .chip,.sortbar .pbtn{flex:none;min-height:36px;padding:5px 11px}
+    .sortbar .shint{flex:1;min-width:0;margin-left:6px;text-align:right;font-size:10.5px;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+    .sect{display:none}
+
+    /* ── 表格：容器内滚动；表头吸顶 + 首列/操作列固定 ── */
+    .tablebox{overflow:auto;max-height:calc(100vh - 300px);max-height:calc(100dvh - 300px);
+      padding-bottom:88px;-webkit-overflow-scrolling:touch}
+    table{border-collapse:separate;border-spacing:0;font-size:13px}
+    th{z-index:4;box-shadow:0 2px 4px rgba(30,43,56,.12)}
+    th:first-child{left:0;z-index:6;
+      box-shadow:2px 0 5px -1px rgba(30,43,56,.16),0 2px 4px rgba(30,43,56,.12)}
+    #thAction{right:0;z-index:6;
+      box-shadow:-2px 0 5px -1px rgba(30,43,56,.16),0 2px 4px rgba(30,43,56,.12)}
+    td:first-child{position:sticky;left:0;z-index:3;background:var(--paper);
+      border-right:1px solid #E2DDCF;box-shadow:2px 0 5px -1px rgba(30,43,56,.14)}
+    tbody tr:nth-child(even) td:first-child{background:#FAF8F2}
+    tbody tr:hover td:first-child{background:#F3EFE4}
+    td.act{position:sticky;right:0;z-index:3;min-width:124px;text-align:center;
+      background:var(--paper);border-left:1px solid #E2DDCF;
+      box-shadow:-2px 0 5px -1px rgba(30,43,56,.14)}
+    tbody tr:nth-child(even) td.act{background:#FAF8F2}
+    tbody tr:hover td.act{background:#F3EFE4}
+    td.wide{white-space:nowrap;min-width:120px;max-width:172px;overflow:hidden;text-overflow:ellipsis}
+    td.num{white-space:nowrap}
+    /* 操作按钮：32px 高 + ::after 扩出热区（≥40px），两按钮间距加大防误触删除 */
+    .mini{position:relative;min-height:32px;padding:5px 13px;font-size:13px}
+    .mini::after{content:"";position:absolute;inset:-5px}
+    td.act .mini + .mini{margin-left:12px}
+
+    /* ── 触屏按压态（替代 hover 反馈） ── */
+    button:active{transform:none;opacity:.8}
+    button:disabled:active{opacity:.5}
+    .btn-p:active{opacity:1;background:var(--navy-deep)}
+    .btn-danger:active,.btn-ghost-danger:active,.mini.danger:active{background:var(--accent);
+      border-color:var(--accent);color:#fff;opacity:1}
+    .chip:active{border-color:var(--navy);color:var(--navy);opacity:.85}
+    .chip.on:active{color:#FBF7EE;opacity:.9}
+    .mcell:active{border-color:var(--navy)}
+
+    /* ── 弹窗：近全屏，底部按钮吸底 ── */
+    #modal{padding:12px}
+    .modal-card{width:calc(100vw - 24px);max-width:420px;height:calc(100vh - 24px);
+      height:min(calc(100dvh - 24px),640px);display:flex;flex-direction:column}
+    .modal-head{flex:none;padding:12px 16px;font-size:16px}
+    .modal-body{flex:1;min-height:0;max-height:none;padding:14px 16px;
+      -webkit-overflow-scrolling:touch}
+    .modal-foot{flex:none;padding:10px 16px;padding-bottom:calc(10px + env(safe-area-inset-bottom));
+      box-shadow:0 -4px 12px rgba(0,0,0,.08)}
+    .modal-foot button{flex:1;min-height:46px;font-size:16px}
+    #modalSubmit{flex:1.5}
+    .grid{grid-template-columns:1fr;gap:12px}
+    #modalBody input,#modalBody select{min-height:42px;font-size:16px;padding:8px 10px}
+    .modal-body .chk{min-height:36px}
+
+    /* ── 未保存确认层 ── */
+    .confirm-card{max-width:calc(100vw - 24px)}
+    .confirm-foot{flex-direction:column;padding:10px 16px;
+      padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+    .confirm-foot button{min-height:44px;font-size:14px}
+    #confirmStay{order:-2}#confirmKeep{order:-1}
+
+    .login-panel input{font-size:16px}
+
+    #toast{left:12px;right:12px;max-width:none;
+      bottom:calc(88px + env(safe-area-inset-bottom))}
+    .foot{font-size:10.5px}
+  }
 </style>
 </head>
 <body>
@@ -297,11 +442,16 @@
     <span class="issue">内部台账 · 2026</span>
     <span id="who"></span>
     <span class="grow"></span>
-    <button id="btnAccounts" class="quiet" style="display:none">账号管理</button>
-    <button id="btnChangePw" class="quiet">修改密码</button>
-    <button id="btnRefresh" class="quiet">刷新</button>
-    <button id="btnExport" class="quiet">导出 CSV</button>
-    <button id="btnLogout" class="quiet">退出</button>
+    <!-- PC：navmenu 为 display:contents，按钮直接参与 header 排版，与旧版完全一致；
+         手机：navmenu 变为 ≡ 下拉菜单（见底部 media 查询）。按钮 id 与事件绑定均未变。 -->
+    <div class="navmenu" id="navMenu">
+      <button id="btnAccounts" class="quiet" style="display:none">账号管理</button>
+      <button id="btnChangePw" class="quiet">修改密码</button>
+      <button id="btnRefresh" class="quiet">刷新</button>
+      <button id="btnExport" class="quiet">导出 CSV</button>
+      <button id="btnLogout" class="quiet">退出</button>
+    </div>
+    <button id="navBurger" type="button" aria-label="菜单">≡</button>
   </header>
 
   <div class="wrap">
@@ -428,5 +578,20 @@
 </script>
 <script src="config.js"></script>
 <script src="app.js?v=20261114c"></script>
+
+<!-- 移动端 ≡ 菜单开合：纯展示逻辑，不读写任何业务数据（唯一新增的 JS） -->
+<script>
+(function () {
+  var b = document.getElementById('navBurger'), m = document.getElementById('navMenu');
+  if (!b || !m) return;
+  b.addEventListener('click', function (e) { e.stopPropagation(); m.classList.toggle('open'); });
+  m.addEventListener('click', function (e) {
+    if (e.target && e.target.tagName === 'BUTTON') m.classList.remove('open');
+  });
+  document.addEventListener('click', function (e) {
+    if (m.classList.contains('open') && e.target !== b && !m.contains(e.target)) m.classList.remove('open');
+  });
+})();
+</script>
 </body>
 </html>
