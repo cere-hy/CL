@@ -199,6 +199,10 @@
   .modal-body{padding:20px 22px;max-height:64vh;overflow:auto}
   .modal-foot{padding:12px 22px;border-top:1px solid var(--line);
     display:flex;justify-content:flex-end;gap:9px;background:var(--soft)}
+  /* 删除此单：手机端编辑弹窗左下角的红色文字按钮（JS 控制 display） */
+  .modal-del{margin-right:auto;background:transparent;border:0;color:var(--accent);
+    font-weight:700;font-size:13px;letter-spacing:.04em;padding:7px 6px}
+  .modal-del:hover{background:transparent;border:0;color:#862F22;transform:none}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px}
   .fld{display:block;font-size:12px;color:#4A5560}
   .fld>span{display:block;margin-bottom:6px;font-weight:600;letter-spacing:.04em}
@@ -240,6 +244,22 @@
                 padding:12px 22px;border-top:1px solid var(--line);background:var(--soft)}
   .btn-ghost-danger{color:var(--accent);border-color:#E7C7BF}
   .btn-ghost-danger:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+
+  /* ── 删除强确认层：必须手输「删除」两字，确认按钮才解锁（盖在弹窗之上） ── */
+  #delLayer{position:fixed;inset:0;background:rgba(24,32,42,.62);z-index:90;
+            align-items:center;justify-content:center;padding:20px}
+  .del-card{background:var(--paper);border:1px solid var(--line);border-top:4px solid var(--accent);
+    border-radius:3px;width:100%;max-width:440px;box-shadow:0 24px 70px rgba(20,32,45,.32);
+    animation:modalIn .24s var(--ease) both}
+  .del-head{padding:16px 22px 0;font-family:var(--serif);font-size:16px;font-weight:600;color:var(--accent)}
+  .del-body{padding:10px 22px 6px;font-size:13px;line-height:1.9;color:#4A5560}
+  .del-body b{color:var(--navy-deep)}
+  .del-body .dsum{margin:10px 0}
+  .del-body p{margin:4px 0 0}
+  .del-input{padding:8px 22px 4px}
+  .del-input input{border-color:#E7C7BB;background:#FBF6EF}
+  .del-foot{display:flex;gap:8px;justify-content:flex-end;
+            padding:12px 22px;border-top:1px solid var(--line);background:var(--soft)}
 
   @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   @keyframes modalIn{from{opacity:0;transform:translateY(-10px) scale(.995)}to{opacity:1;transform:none}}
@@ -333,30 +353,37 @@
 
     .sect{display:none}
 
-    /* ── 表格：容器内滚动；表头吸顶 + 首列/操作列固定 ── */
+    /* ── 表格：容器内滚动；表头吸顶 + 左固定（客户姓名 pin-l）/ 操作列固定 ──
+       手机端列序由 app.js 调整：业务编号挪到操作列前，客户姓名加 pin-l 固定在左 */
     .tablebox{overflow:auto;max-height:calc(100vh - 300px);max-height:calc(100dvh - 300px);
       padding-bottom:88px;-webkit-overflow-scrolling:touch}
     table{border-collapse:separate;border-spacing:0;font-size:13px}
     th{z-index:4;box-shadow:0 2px 4px rgba(30,43,56,.12)}
-    th:first-child{left:0;z-index:6;
+    th.pin-l{left:0;z-index:6;
       box-shadow:2px 0 5px -1px rgba(30,43,56,.16),0 2px 4px rgba(30,43,56,.12)}
     #thAction{right:0;z-index:6;
       box-shadow:-2px 0 5px -1px rgba(30,43,56,.16),0 2px 4px rgba(30,43,56,.12)}
-    td:first-child{position:sticky;left:0;z-index:3;background:var(--paper);
+    td.pin-l{position:sticky;left:0;z-index:3;background:var(--paper);
       border-right:1px solid #E2DDCF;box-shadow:2px 0 5px -1px rgba(30,43,56,.14)}
-    tbody tr:nth-child(even) td:first-child{background:#FAF8F2}
-    tbody tr:hover td:first-child{background:#F3EFE4}
-    td.act{position:sticky;right:0;z-index:3;min-width:124px;text-align:center;
+    tbody tr:nth-child(even) td.pin-l{background:#FAF8F2}
+    tbody tr:hover td.pin-l{background:#F3EFE4}
+    td.act{position:sticky;right:0;z-index:3;width:52px;min-width:52px;text-align:center;
       background:var(--paper);border-left:1px solid #E2DDCF;
       box-shadow:-2px 0 5px -1px rgba(30,43,56,.14)}
     tbody tr:nth-child(even) td.act{background:#FAF8F2}
     tbody tr:hover td.act{background:#F3EFE4}
     td.wide{white-space:nowrap;min-width:120px;max-width:172px;overflow:hidden;text-overflow:ellipsis}
     td.num{white-space:nowrap}
-    /* 操作按钮：32px 高 + ::after 扩出热区（≥40px），两按钮间距加大防误触删除 */
-    .mini{position:relative;min-height:32px;padding:5px 13px;font-size:13px}
-    .mini::after{content:"";position:absolute;inset:-5px}
-    td.act .mini + .mini{margin-left:12px}
+    /* 滑动暗示：两个固定列内侧的渐变阴影，提示中间区域可以左右滑 */
+    .pin-l::after{content:"";position:absolute;top:0;bottom:0;right:-12px;width:12px;
+      background:linear-gradient(to right,rgba(30,43,56,.10),rgba(30,43,56,0));pointer-events:none}
+    #thAction::after,td.act::after{content:"";position:absolute;top:0;bottom:0;left:-12px;width:12px;
+      background:linear-gradient(to left,rgba(30,43,56,.10),rgba(30,43,56,0));pointer-events:none}
+    /* 操作按钮：仅一个 ✏️ 图标（删除已移入编辑弹窗），::after 扩出热区（≥40px） */
+    .mini{position:relative;min-height:32px;padding:5px 9px;font-size:13px}
+    .mini::after{content:"";position:absolute;inset:-6px}
+    .mini.iconbtn{width:38px;min-width:38px;padding:0;font-size:15px;line-height:1.2;
+      border-radius:8px}
 
     /* ── 触屏按压态（替代 hover 反馈） ── */
     button:active{transform:none;opacity:.8}
@@ -378,6 +405,7 @@
     .modal-foot{flex:none;padding:10px 16px;padding-bottom:calc(10px + env(safe-area-inset-bottom));
       box-shadow:0 -4px 12px rgba(0,0,0,.08)}
     .modal-foot button{flex:1;min-height:46px;font-size:16px}
+    .modal-foot .modal-del{flex:none;min-height:46px;font-size:14px}
     #modalSubmit{flex:1.5}
     .grid{grid-template-columns:1fr;gap:12px}
     #modalBody input,#modalBody select{min-height:42px;font-size:16px;padding:8px 10px}
@@ -389,6 +417,14 @@
       padding-bottom:calc(10px + env(safe-area-inset-bottom))}
     .confirm-foot button{min-height:44px;font-size:14px}
     #confirmStay{order:-2}#confirmKeep{order:-1}
+
+    /* ── 删除强确认层 ── */
+    .del-card{max-width:calc(100vw - 24px)}
+    .del-foot{flex-direction:column;padding:10px 16px;
+      padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+    .del-foot button{min-height:44px;font-size:15px;flex:1}
+    .del-input{padding:8px 16px 4px}
+    .del-input input{font-size:16px;min-height:42px}
 
     .login-panel input{font-size:16px}
 
@@ -544,6 +580,8 @@
     </div>
     <div class="modal-body" id="modalBody"></div>
     <div class="modal-foot">
+      <!-- 手机端编辑弹窗左下角的删除入口（JS 控制显隐，PC 隐藏） -->
+      <button id="modalDelBtn" class="modal-del" style="display:none">删除此单</button>
       <button id="modalCancel">取消</button>
       <button id="modalSubmit" class="btn-p">保存</button>
     </div>
@@ -563,6 +601,20 @@
   </div>
 </div>
 
+<!-- 删除强确认层：必须手动输入「删除」两字，「确认删除」才从禁用变为可点 -->
+<div id="delLayer" style="display:none">
+  <div class="del-card">
+    <div class="del-head">删除这条签单？</div>
+    <div class="del-body" id="delText"></div>
+    <div class="del-input"><input id="delInput" type="text" maxlength="6"
+      placeholder="输入「删除」两个字后才能确认" autocomplete="off"></div>
+    <div class="del-foot">
+      <button id="delCancel">取消</button>
+      <button id="delConfirm" class="btn-danger" disabled>确认删除</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <!-- 下拉候选（datalist 可放在文档任意位置） -->
@@ -577,7 +629,7 @@
   }
 </script>
 <script src="config.js"></script>
-<script src="app.js?v=20261114c"></script>
+<script src="app.js?v=20261115a"></script>
 
 <!-- 移动端 ≡ 菜单开合：纯展示逻辑，不读写任何业务数据（唯一新增的 JS） -->
 <script>
