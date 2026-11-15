@@ -184,6 +184,15 @@ Z + 签约日期(YYMMDD) + 当日流水号（至少 2 位，从 01 起；超过 
 
 > **安全设计**：浏览器端的 `auth.admin.updateUserById()` 需要 `service_role` / `sb_secret_` 密钥，那把钥匙放进公开网页会绕过全部 RLS，等于把整库交出去。因此改用数据库 `SECURITY DEFINER` 函数代写 `auth.users`，函数内独立校验 ① 已登录 ② 调用者是 admin ③ 不是本人 ④ 目标账号存在，并固定密码为 `888888`（不接受任意密码参数）；`EXECUTE` 只授予 `authenticated`，`anon` 无权调用。SQL Editor 里 `auth.uid()` 为空，匿名直调会被第 ① 道拒绝。
 
+### 4.6 Apple 风格改版（2026-11-15，评审通过稿）
+
+界面整体换为苹果「简约高级」设计语言，**HTML 结构与全部 id/事件零改动、app.js 零改动**，仅重写 CSS：
+
+- **令牌**：页面底 #F5F5F7、纯白面板、发丝线 rgba(0,0,0,.08)、主文字 #1D1D1F / 次 #6E6E73；唯一强调色为系统蓝 #0071E3（沿用 `--navy` 变量名），警示红 #FF3B30（`--accent`）、提醒橙 #FF9500（`--gold`）。旧衬线"账簿风"全部并入系统字体栈（SF Pro / 苹方，0 字节字体下载）。
+- **按钮**：全站胶囊形（980px 圆角）+ 44px 触控高度 + 按压缩放回弹（cubic-bezier 弹性曲线，可被打断）；层级只由"蓝色填充 / 浅灰填充 / 纯文字"三档表达，无描边按钮；行内编辑/删除改为蓝/红文字按钮。
+- **组件**：排序/区间 chips 改胶囊分段；月份格、状态底色（7 档进度 + 结账状态）映射到苹果系统色浅底；弹窗圆角 18、iOS Alert 式删除强确认；手机端顶栏与 PC 顶栏毛玻璃（`backdrop-filter:saturate(180%) blur(20px)`，`@supports` 兜底半透明纯色）。
+- **性能**：零新依赖、动效仅 transform/opacity、CSS 增量 gzip 后约 1KB；保留 prefers-reduced-motion 全局减动效。
+
 ### 4.5 手机端适配（≤768px，纯 CSS + 顶栏结构微调）
 
 `app.js` 与业务逻辑零改动；全部移动端样式收在 `@media (max-width:768px)` 内，PC（>768px）渲染与旧版逐像素一致。
