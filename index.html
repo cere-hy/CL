@@ -400,7 +400,7 @@
       border-right:1px solid var(--hairline);box-shadow:2px 0 6px rgba(0,0,0,.06);font-weight:600}
     tbody tr:nth-child(even) td.pin-l{background:#FAFAFC}
     tbody tr:hover td.pin-l{background:#F5F8FF}
-    td.act{position:sticky;right:0;z-index:3;width:52px;min-width:52px;text-align:center;
+    td.act{position:sticky;right:0;z-index:3;width:44px;min-width:44px;text-align:center;
       background:var(--paper);border-left:1px solid var(--hairline);
       box-shadow:-2px 0 6px rgba(0,0,0,.06)}
     tbody tr:nth-child(even) td.act{background:#FAFAFC}
@@ -412,12 +412,13 @@
       background:linear-gradient(to right,rgba(0,0,0,.07),rgba(0,0,0,0));pointer-events:none}
     #thAction::after,td.act::after{content:"";position:absolute;top:0;bottom:0;left:-12px;width:12px;
       background:linear-gradient(to left,rgba(0,0,0,.07),rgba(0,0,0,0));pointer-events:none}
-    /* 操作按钮：仅一个 ✏️ 圆形图标（删除已移入编辑弹窗），::after 扩热区（≥40px） */
+    /* 操作按钮：线框 SVG 铅笔（无底色无边框，墨蓝着色），::after 扩热区（≥40px） */
     .mini{position:relative;min-height:32px;padding:5px 9px;font-size:13px}
     .mini::after{content:"";position:absolute;inset:-6px}
-    .mini.iconbtn{width:36px;height:36px;min-width:36px;padding:0;
-      border-radius:50%;background:#F2F2F7;color:var(--ink);font-size:15px;line-height:1.2}
-    .mini.iconbtn:active{transform:scale(.9);background:#E8E8ED;color:var(--ink)}
+    .mini.iconbtn{width:28px;height:28px;min-width:28px;padding:0;border:none;
+      background:none;color:var(--navy);line-height:0}
+    .mini.iconbtn svg{display:block;margin:0 auto}
+    .mini.iconbtn:active{transform:scale(.85);background:none;color:var(--navy-deep);opacity:.7}
 
     /* ── 触屏按压态（替代 hover 反馈） ── */
     button:active{transform:scale(.97);opacity:.92}
@@ -663,7 +664,7 @@
   }
 </script>
 <script src="config.js"></script>
-<script src="app.js?v=20261115a"></script>
+<script src="app.js?v=20261115b"></script>
 
 <!-- 移动端 ≡ 菜单开合：纯展示逻辑，不读写任何业务数据（唯一新增的 JS） -->
 <script>
