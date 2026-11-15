@@ -643,7 +643,8 @@
       if (canEdit) {
         tds += isMobile
           // 手机端：操作列只留 ✏️ 图标；删除入口移入编辑弹窗左下角（强确认），防误触
-          ? '<td class="act"><button class="mini iconbtn" data-edit="' + row.id + '" aria-label="编辑" title="编辑">✏️</button></td>'
+          ? '<td class="act"><button class="mini iconbtn" data-edit="' + row.id + '" aria-label="编辑" title="编辑">' +
+            '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button></td>'
           : '<td class="act">' +
             '<button class="mini" data-edit="' + row.id + '">编辑</button> ' +
             '<button class="mini danger" data-del="' + row.id + '">删除</button>' +
