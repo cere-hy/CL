@@ -716,9 +716,12 @@
     var total = viewRows.length;
     var contract = viewRows.reduce(function (s, x) { return s + (Number(x.contract_amount) || 0); }, 0);
     var loan = viewRows.reduce(function (s, x) { return s + (Number(x.loan_amount) || 0); }, 0);
-    var settled = viewRows.filter(function (x) { return x.settle_status === '已结账'; }).length;
-    // 一手房把「结账」口径显示为「放款」，数值统计逻辑完全不变
+    // 二手房按结账状态统计；一手房按「当前进度 = 已放款」统计，其余状态一律算未放款。
+    // 仅影响这两张 KPI 的显示数值，底层 settle_status / progress 数据与导出都不变。
     var isNew = currentLine === 'new_house';
+    var settled = viewRows.filter(function (x) {
+      return isNew ? x.progress === '已放款' : x.settle_status === '已结账';
+    }).length;
     var items = [
       ['业务总数', total + ' 单'],
       ['合同总价(万)', contract.toFixed(2)],
