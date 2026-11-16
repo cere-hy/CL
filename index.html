@@ -248,6 +248,25 @@
   .fld{display:block;font-size:12px;color:#3A3A3C}
   .fld>span{display:block;margin-bottom:6px;font-weight:600;letter-spacing:.02em}
   .fld small{display:block;color:var(--muted);margin-top:5px;font-size:11px;line-height:1.6}
+  /* 必填项校验：红框 + 红字 + 弹窗快速抖动（用户一开始输入即由 JS 清除） */
+  @keyframes shake{0%,100%{transform:translateX(0)}15%,55%{transform:translateX(-7px)}
+    35%,75%{transform:translateX(7px)}90%{transform:translateX(-3px)}}
+  .modal-card.shake{animation:shake .4s ease both}
+  .fld.req-invalid>input,.fld.req-invalid>select,input.req-invalid,select.req-invalid{
+    border-color:var(--accent)!important;background:#FFFBFA!important;
+    box-shadow:0 0 0 3px rgba(255,59,48,.12)!important}
+  .fld.req-invalid::after{content:"此项为必填项";display:block;margin-top:5px;
+    font-size:11px;line-height:1.5;color:var(--accent);font-weight:500}
+  /* 业务线切换遮罩：盖住数据区但不盖顶栏（≡ 菜单仍在 z-index 40） */
+  .line-loading{position:fixed;inset:56px 0 0;z-index:38;display:flex;
+    align-items:center;justify-content:center;
+    background:rgba(245,245,247,.74);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+  .ll-card{display:flex;align-items:center;gap:12px;padding:14px 20px;border-radius:14px;
+    background:var(--paper);box-shadow:var(--sh-pop);font-size:14px;color:var(--ink);
+    max-width:calc(100vw - 40px)}
+  .ll-spin{width:18px;height:18px;flex:none;border:2px solid rgba(0,113,227,.2);
+    border-top-color:var(--navy);border-radius:50%;animation:llspin .7s linear infinite}
+  @keyframes llspin{to{transform:rotate(360deg)}}
   .chk{display:flex;align-items:center;gap:8px;font-size:13px;margin:12px 0}
   .chk input{width:auto}
   .note{background:rgba(0,113,227,.06);border-radius:12px;
@@ -400,6 +419,10 @@
       box-shadow:0 8px 24px rgba(0,113,227,.4)}
     #btnNewRecord::after{content:"＋";font-size:26px;font-weight:500}
     #btnNewRecord:active{transform:scale(.92);opacity:1}
+    /* 业务线切换中：FAB 变灰禁用，提示不可新增，避免误把新单写到另一条线 */
+    #btnNewRecord:disabled{background:#B8B8BD;color:#F5F5F7;box-shadow:none;
+      transform:none;cursor:not-allowed;opacity:1}
+    #btnNewRecord:disabled::after{color:#F5F5F7}
     .toolbar label{font-size:12px}
     .toolbar select,.toolbar input[type=text]{min-width:96px;min-height:38px;
       font-size:16px;padding:5px 9px}
@@ -548,6 +571,11 @@
     <button id="navBurger" type="button" aria-label="菜单">≡</button>
   </header>
 
+  <!-- 业务线切换加载遮罩：请求期间覆盖数据区，避免旧线数据残留造成「没切过去」的错觉 -->
+  <div id="lineLoading" class="line-loading" style="display:none" aria-live="polite">
+    <div class="ll-card"><span class="ll-spin"></span><span id="lineLoadingText">正在切换，请稍候…</span></div>
+  </div>
+
   <div class="wrap">
     <!-- 统计区间：快捷标签 + 月份勾选 + 自定义日期，作用于 KPI / 明细 / 导出 -->
     <div class="periodbar" id="periodBar">
@@ -687,7 +715,7 @@
   }
 </script>
 <script src="config.js"></script>
-<script src="app.js?v=20261116a"></script>
+<script src="app.js?v=20261116b"></script>
 
 <!-- 移动端 ≡ 菜单开合：纯展示逻辑，不读写任何业务数据（唯一新增的 JS） -->
 <script>
