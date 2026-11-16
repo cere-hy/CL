@@ -39,6 +39,8 @@
   // 单线账号只有一项、隐藏切换器；多线账号可切换，KPI/明细/导出随 currentLine 变。
   var LINE_LABEL = { second_hand: '二手房系统', new_house: '一手房系统' };
   var currentLine = 'second_hand';
+  // 数据请求代次：切换业务线 / 失败回退时自增，迟到响应不得覆盖新（或已回退）业务线的数据
+  var loadEpoch = 0;
 
   // 统计区间：all=全部时间 | preset=快捷区间 | months=勾选月份(可跨年多选) | range=自定义起止
   var period = { kind: 'all' };
@@ -572,30 +574,88 @@
       : '客户汇总清单台账';
   }
 
-  // 切换业务线：只换数据上下文，DOM/CSS 全部复用（手机端既有优化自动沿用）
+  // 给请求加超时兜底：超时后 race 结束等待，底层迟到响应仍会被 loadEpoch 拦掉
+  function withTimeout(p, ms, label) {
+    return new Promise(function (resolve, reject) {
+      var t = setTimeout(function () { reject(new Error(label)); }, ms);
+      Promise.resolve(p).then(function (x) { clearTimeout(t); resolve(x); },
+                              function (e) { clearTimeout(t); reject(e); });
+    });
+  }
+
+  // 切换业务线：先清旧数据 + 上锁，再请求；失败/超时完整回退到切换前状态
   async function switchLine(v) {
     var allowed = Array.isArray(profile.allowed_lines) ? profile.allowed_lines : [];
-    if (!v || allowed.indexOf(v) < 0 || v === currentLine) return;
+    var sel = $('#lineSwitch');
+    if (!v || allowed.indexOf(v) < 0 || v === currentLine) {
+      if (sel && allowed.indexOf(String(sel.value || '')) < 0) sel.value = currentLine;
+      return;
+    }
+    var from = currentLine;
+    // 回退快照：失败时连表格和 KPI 一起还原，不留空白页
+    var snap = { rows: rows.slice(), view: viewRows.slice(),
+                 channels: channels.slice(), managers: managers.slice() };
+    var epoch = ++loadEpoch;
     currentLine = v;
-    // 切换线后渠道集合不同，渠道筛选必须清空，否则会用上一线的渠道名过滤到 0 行
-    if ($('#chanFilter')) $('#chanFilter').value = '';
-    renderShell();
-    await Promise.all([loadChannels(), loadManagers()]);
-    await loadRecords();
-    toast('已切换到' + (LINE_LABEL[v] || v));
+
+    // ① 立刻清空旧数据：KPI / 明细 / 计数 / 导出口径一起归零
+    rows = [];
+    viewRows = [];
+    refreshView();
+
+    // ② 加载态：遮罩 + FAB 禁用 + 下拉框禁用，杜绝连点串台
+    var ov = $('#lineLoading'), lt = $('#lineLoadingText');
+    if (lt) lt.textContent = '正在切换至 ' + (LINE_LABEL[v] || v) + '，请稍候…';
+    if (ov) ov.style.display = 'flex';
+    var fab = $('#btnNewRecord');
+    if (fab) { fab.disabled = true; if (fab.classList) fab.classList.add('busy'); }
+    if (sel) sel.disabled = true;
+
+    var ok = false;
+    try {
+      // 切换线后渠道集合不同，渠道筛选必须清空，否则会用上一线的渠道名过滤到 0 行
+      if ($('#chanFilter')) $('#chanFilter').value = '';
+      var res = await withTimeout(Promise.all([loadChannels(), loadManagers(), loadRecords()]),
+                                  12000, '切换业务线超时');
+      ok = res.every(function (x) { return x !== false; });
+      if (!ok) throw new Error('切换业务线失败');
+    } catch (e) {
+      // ④ 失败 / 超时：清除遮罩、回退业务线与数据、下拉框恢复原值
+      loadEpoch++;                       // 作废本次（可能还在路上的）请求
+      currentLine = from;
+      rows = snap.rows.slice();
+      viewRows = snap.view.slice();
+      channels = snap.channels.slice();
+      managers = snap.managers.slice();
+      refreshView();
+      if (sel) sel.value = from;
+      renderShell();
+      toast('切换失败，已返回' + (LINE_LABEL[from] || from) + '：' + netHint(e), 'err');
+    } finally {
+      if (ov) ov.style.display = 'none';
+      if (fab) { fab.disabled = false; if (fab.classList) fab.classList.remove('busy'); }
+      if (sel) sel.disabled = false;
+    }
+    if (ok) {
+      renderShell();   // 标题 / 下拉值 / 按钮口径更新为已完成切换
+      toast('已切换到' + (LINE_LABEL[v] || v));
+    }
   }
 
   // ---------------------------------------------------------------- 载入数据
   async function loadChannels() {
     // 渠道按业务线隔离（两线可有渠道名，但客户确认不同名；仍按线过滤保证干净）
+    var epoch = loadEpoch;
     var r = await db.from('channels').select('name').eq('business_line', currentLine).order('id');
-    if (r.error) { toast('读取渠道失败：' + netHint(r.error), 'err'); return; }
+    if (r.error) { toast('读取渠道失败：' + netHint(r.error), 'err'); return false; }
+    if (epoch !== loadEpoch) return false;   // 切换/回退已发生，丢弃迟到响应
     channels = (r.data || []).map(function (x) { return x.name; });
     var sel = $('#chanFilter');
     var cur = sel.value;
     sel.innerHTML = opts(channels, cur, '全部渠道');
     var dl = $('#channelList');
     if (dl) dl.innerHTML = channels.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('');
+    return true;
   }
 
   async function loadManagers() {
@@ -611,10 +671,12 @@
     }
     var dl = $('#managerList');
     if (dl) dl.innerHTML = managers.map(function (m) { return '<option value="' + esc(m) + '">'; }).join('');
+    return true;
   }
 
   async function loadRecords() {
     // 服务端给个稳定初始序即可；最终展示顺序由 sortView() 按「列表排序」按钮决定
+    var epoch = loadEpoch;
     var q = db.from('records').select('*').order('sign_date', { ascending: false }).order('id', { ascending: false });
 
     // 业务线永远作为第一前提：双线账号靠它「分开浏览统计」，单线账号它是纵深防御。
@@ -634,9 +696,11 @@
     if (kw) q = q.or('biz_no.ilike.%' + kw + '%,customer_name.ilike.%' + kw + '%,property_address.ilike.%' + kw + '%');
 
     var r = await q.limit(2000);
-    if (r.error) { toast('读取台账失败：' + netHint(r.error), 'err'); return; }
+    if (r.error) { toast('读取台账失败：' + netHint(r.error), 'err'); return false; }
+    if (epoch !== loadEpoch) return false;   // 业务线已切换/回退：绝不让旧线数据覆盖当前界面
     rows = r.data || [];
     refreshView();   // KPI / 明细 / 导出统一按「统计区间」重新计算
+    return true;
   }
 
   function renderKpi() {
@@ -800,6 +864,63 @@
     }
     return false;
   }
+  // ---- 必填项校验：红框 + 红字提示 + 抖动 + 聚焦首错；用户输入即清除 ----
+  function fieldWrap(el) {
+    var p = el;
+    for (var i = 0; p && i < 6; i++, p = p.parentNode) {
+      if (p.classList && p.classList.contains('fld')) return p;
+      if (p.id === 'modalBody') break;
+    }
+    return null;
+  }
+  function fieldVisible(el) {
+    if (!el || el.disabled) return false;
+    var p = el;
+    for (var i = 0; p && i < 6; i++, p = p.parentNode) {
+      if (p.style && p.style.display === 'none') return false;
+      if (p.id === 'modalBody') break;
+    }
+    return true;
+  }
+  function clearFieldError(el) {
+    if (!el) return;
+    if (el.classList) el.classList.remove('req-invalid');
+    var w = fieldWrap(el);
+    if (w && w.classList) w.classList.remove('req-invalid');
+  }
+  function validateRequired(ids) {
+    if (!ids || !ids.length) return true;
+    var bad = [], first = null;
+    ids.forEach(function (id) {
+      var el = $('#' + id);
+      if (!fieldVisible(el)) return;              // 隐藏 / 禁用的字段不参与校验
+      if (fieldVal(el, id).trim() !== '') { clearFieldError(el); return; }
+      if (el.classList) el.classList.add('req-invalid');
+      var w = fieldWrap(el);
+      if (w && w.classList) w.classList.add('req-invalid');
+      bad.push(el);
+      if (!first) first = el;
+    });
+    if (!bad.length) return true;
+    var card = document.querySelector('.modal-card');
+    if (card && card.classList) {
+      card.classList.remove('shake');
+      void card.offsetWidth;                     // 强制重排：连点保存也能再次抖动
+      card.classList.add('shake');
+      clearTimeout(card._shakeT);
+      card._shakeT = setTimeout(function () { card.classList.remove('shake'); }, 450);
+    }
+    if (first) {
+      if (typeof first.focus === 'function') first.focus();
+      if (typeof first.scrollIntoView === 'function') {
+        try { first.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+        catch (e) { first.scrollIntoView(true); }
+      }
+    }
+    toast('还有 ' + bad.length + ' 项必填未填写，已在表单中标红', 'err');
+    return false;
+  }
+
   // 真实浏览器里 input/change 会冒泡到 modalBody；程序化赋值（自动编号、恢复草稿）不触发
   function watchDirty() {
     var box = $('#modalBody');
@@ -809,6 +930,7 @@
         var t = e && e.target;
         if (!t || !t.id || t.disabled || t.readOnly || t.id === 'f_biz_no') return;
         dirtyTouched = true;
+        clearFieldError(t);                       // 一开始输入就撤掉红框与红字
       });
     });
   }
@@ -854,14 +976,20 @@
     toast(key ? '草稿已保留，下次打开「' + drafts[key].label + '」会自动恢复' : '已关闭');
   }
 
-  function openModal(title, html, onSubmit, submitText, formKey, defaults) {
+  function openModal(title, html, onSubmit, submitText, formKey, defaults, requiredIds) {
     // 已有弹窗没保存时，先确认再替换，避免点别的按钮把整个表单冲掉
     if (modalVisible() && formDirty()) {
       return showConfirmDiscard(function () {
         closeModal();
-        openModal(title, html, onSubmit, submitText, formKey, defaults);
+        openModal(title, html, onSubmit, submitText, formKey, defaults, requiredIds);
       });
     }
+    // 换表单时清掉上一次的校验红框与抖动状态
+    Array.prototype.forEach.call(document.querySelectorAll('#modalBody .req-invalid'), function (e) {
+      if (e.classList) e.classList.remove('req-invalid');
+    });
+    var cardOld = document.querySelector('.modal-card');
+    if (cardOld && cardOld.classList) cardOld.classList.remove('shake');
     modalSeq++;
     activeFormKey = formKey || '';
     $('#modalTitle').textContent = title;
@@ -890,6 +1018,8 @@
     snapshotForm();   // 基线要在恢复草稿之后取，否则恢复内容会被误判成「已改动」
 
     $('#modalSubmit').onclick = async function () {
+      // 必填校验在最前面：失败时只抖动标红，不锁定保存、不发任何请求
+      if (!validateRequired(requiredIds)) return;
       var btn = this;
       btn.disabled = true;
       modalSaving = true;
@@ -1102,7 +1232,7 @@
         toast((isNew ? '已录入，编号 ' + savedBizNo : '已保存') + tail);
       }
       await loadRecords();
-    }, '保存', (isNew ? 'record:new' : 'record:' + id));
+    }, '保存', (isNew ? 'record:new' : 'record:' + id), null, ['f_channel', 'f_manager_name']);
 
     // 手机端：删除入口收进编辑弹窗左下角（桌面端仍用列表行内「删除」按钮）
     var delBtn = $('#modalDelBtn');
@@ -1179,7 +1309,7 @@
       await loadChannels();
       renderShell();
       await loadRecords();
-    }, '保存', 'channel:new', { c_pw: DEFAULT_CHANNEL_PW });
+    }, '保存', 'channel:new', { c_pw: DEFAULT_CHANNEL_PW }, ['c_name', 'c_phone']);
     $('#c_make_account').onchange = function () {
       $('#c_account').style.display = this.checked ? 'grid' : 'none';
     };
@@ -1220,7 +1350,8 @@
       closeModal();
       toast('账号已开通：' + phone);
       await loadManagers();
-    }, '保存', 'person:' + role, isMgr ? null : { p_pw: DEFAULT_CHANNEL_PW });
+    }, '保存', 'person:' + role, isMgr ? null : { p_pw: DEFAULT_CHANNEL_PW },
+       isMgr ? ['p_name', 'p_phone'] : ['p_channel', 'p_phone']);
 
     // 客户经理：填手机号后自动把密码带成同一手机号；主管手动改过密码就不再跟随
     var phoneEl = $('#p_phone'), pwEl = $('#p_pw');
@@ -1299,7 +1430,7 @@
       if (r.error) return toast(netHint(r.error), 'err');
       closeModal();
       toast('密码已修改，下次登录请用新密码');
-    }, '确认修改', 'password:self');
+    }, '确认修改', 'password:self', null, ['pw_new', 'pw_new2']);
   }
 
   async function openAccounts() {
@@ -1475,7 +1606,14 @@
     // 新增 DOM 节点做空值保护：只更新了 app.js、index.html 还是旧版时也不会整段报错
     var on = function (sel, fn) { var el = $(sel); if (el) el.onclick = fn; };
     // 业务线切换：选项来自 allowed_lines，on() 空值保护兼容旧版 index.html
+    // 同时监听 change：手机/PC 下拉选中即触发，不必等 click 冒泡
     on('#lineSwitch', function () { switchLine(this.value); });
+    var lineSel = $('#lineSwitch');
+    if (lineSel && typeof lineSel.addEventListener === 'function') {
+      lineSel.addEventListener('change', function () { switchLine(this.value); });
+    } else if (lineSel) {
+      lineSel.onchange = function () { switchLine(this.value); };
+    }
     // 密码管理（旧版 index.html 没有这两个按钮时，on() 会安全跳过）
     on('#btnChangePw', openChangePassword);
     on('#btnAccounts', openAccounts);
