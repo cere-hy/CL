@@ -248,6 +248,8 @@
   .modal-del:hover{background:rgba(255,59,48,.08);color:var(--accent)}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px}
   .fld{display:block;font-size:12px;color:#3A3A3C}
+  /* 一手房不录结账状态：整块字段容器隐藏，值仍随单据保存，导出/统计不受影响 */
+  .fld.line-hide{display:none}
   .fld>span{display:block;margin-bottom:6px;font-weight:600;letter-spacing:.02em}
   .fld small{display:block;color:var(--muted);margin-top:5px;font-size:11px;line-height:1.6}
   /* 必填项校验：红框 + 红字 + 弹窗快速抖动（用户一开始输入即由 JS 清除） */
@@ -717,7 +719,7 @@
   }
 </script>
 <script src="config.js"></script>
-<script src="app.js?v=20261116f"></script>
+<script src="app.js?v=20261116g"></script>
 
 <!-- 移动端 ≡ 菜单开合：纯展示逻辑，不读写任何业务数据（唯一新增的 JS） -->
 <script>

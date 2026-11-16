@@ -389,8 +389,8 @@
     });
     return s;
   }
-  function fld(label, input, hint) {
-    return '<label class="fld"><span>' + esc(label) + '</span>' + input +
+  function fld(label, input, hint, extraCls) {
+    return '<label class="fld' + (extraCls ? ' ' + extraCls : '') + '"><span>' + esc(label) + '</span>' + input +
       (hint ? '<small>' + esc(hint) + '</small>' : '') + '</label>';
   }
   function inp(id, val, type, extra) {
@@ -717,12 +717,14 @@
     var contract = viewRows.reduce(function (s, x) { return s + (Number(x.contract_amount) || 0); }, 0);
     var loan = viewRows.reduce(function (s, x) { return s + (Number(x.loan_amount) || 0); }, 0);
     var settled = viewRows.filter(function (x) { return x.settle_status === '已结账'; }).length;
+    // 一手房把「结账」口径显示为「放款」，数值统计逻辑完全不变
+    var isNew = currentLine === 'new_house';
     var items = [
       ['业务总数', total + ' 单'],
       ['合同总价(万)', contract.toFixed(2)],
       ['贷款金额(万)', loan.toFixed(2)],
-      ['已结账', settled + ' 单'],
-      ['未结账', (total - settled) + ' 单']
+      [isNew ? '已放款' : '已结账', settled + ' 单'],
+      [isNew ? '未放款' : '未结账', (total - settled) + ' 单']
     ];
     $('#kpi').innerHTML = items.map(function (it) {
       // 仅打标记用于前端隐藏；contract 仍参与计算并保留在导出/后台数据中
@@ -749,6 +751,10 @@
     // 手机端列序：业务编号从第一列挪到操作列前；客户姓名加 pin-l 固定在左（CSS 生效）。
     // PC 端永远走 COLUMNS 原始顺序，渲染结果与旧版逐像素一致。
     var cols = COLUMNS.slice();
+    // 一手房不展示结账状态列（表头与数据行一起去掉）；底层数据与 CSV 导出仍保留该列
+    if (currentLine === 'new_house') {
+      cols = cols.filter(function (c) { return c.k !== 'settle_status'; });
+    }
     if (isMobile) {
       cols = cols.filter(function (c) { return c.k !== 'biz_no'; });
       cols.push(COLUMNS[0]);   // COLUMNS[0] = 业务编号，紧挨「操作」列
@@ -777,7 +783,7 @@
       return '<tr>' + tds + '</tr>';
     }).join('');
     $('#tblHead').innerHTML = '<tr>' + head + '</tr>';
-    $('#tblBody').innerHTML = body || '<tr><td colspan="' + (COLUMNS.length + (canEdit ? 1 : 0)) + '" class="empty">暂无数据</td></tr>';
+    $('#tblBody').innerHTML = body || '<tr><td colspan="' + (cols.length + (canEdit ? 1 : 0)) + '" class="empty">暂无数据</td></tr>';
     $('#count').textContent = '共 ' + viewRows.length + ' 条';
     Array.prototype.forEach.call(document.querySelectorAll('[data-edit]'), function (b) {
       b.onclick = function () { openRecord(Number(b.getAttribute('data-edit'))); };
@@ -1180,7 +1186,8 @@
       fld('录入人', '<input id="f_created_by" value="' + esc(createdByVal) + '"' + (locked ? ' disabled' : '') + '>', locked ? '已锁定为本人' : '') +
       fld('当前进度', '<select id="f_progress">' + opts(OPTIONS.progress, row ? row.progress : '', '请选择') + '</select>') +
       fld('缺件清单', inp('f_missing_docs', row ? row.missing_docs : '')) +
-      fld('结账状态', '<select id="f_settle_status">' + opts(OPTIONS.settle_status, row ? row.settle_status : '未结账') + '</select>') +
+      fld('结账状态', '<select id="f_settle_status">' + opts(OPTIONS.settle_status, row ? row.settle_status : '未结账') + '</select>',
+          null, currentLine === 'new_house' ? 'line-hide' : '') +
       fld('备注', inp('f_remark', row ? row.remark : '')) +
       '</div>';
 
