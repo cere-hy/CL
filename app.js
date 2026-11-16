@@ -594,7 +594,8 @@
     var from = currentLine;
     // 回退快照：失败时连表格和 KPI 一起还原，不留空白页
     var snap = { rows: rows.slice(), view: viewRows.slice(),
-                 channels: channels.slice(), managers: managers.slice() };
+                 channels: channels.slice(), managers: managers.slice(),
+                 chan: $('#chanFilter') ? $('#chanFilter').value : '' };
     var epoch = ++loadEpoch;
     currentLine = v;
 
@@ -627,6 +628,9 @@
       viewRows = snap.view.slice();
       channels = snap.channels.slice();
       managers = snap.managers.slice();
+      // 回退也必须重建渠道下拉/联想，否则 datalist 里残留目标线渠道 → 串线
+      renderChannelUi();
+      if ($('#chanFilter')) $('#chanFilter').value = snap.chan;
       refreshView();
       if (sel) sel.value = from;
       renderShell();
@@ -643,18 +647,23 @@
   }
 
   // ---------------------------------------------------------------- 载入数据
+  // 渠道相关 UI 统一由当前线的 channels 数组渲染，杜绝任何入口绕过业务线过滤：
+  //   #chanFilter 下拉、#channelList 联想候选都只会拿到 business_line = currentLine 的渠道。
+  function renderChannelUi() {
+    var sel = $('#chanFilter');
+    if (sel) sel.innerHTML = opts(channels, sel.value, '全部渠道');
+    var dl = $('#channelList');
+    if (dl) dl.innerHTML = channels.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('');
+  }
+
   async function loadChannels() {
-    // 渠道按业务线隔离（两线可有渠道名，但客户确认不同名；仍按线过滤保证干净）
+    // 渠道按业务线隔离：查询层强制加 business_line = currentLine（两线不同名，但过滤保证干净）
     var epoch = loadEpoch;
     var r = await db.from('channels').select('name').eq('business_line', currentLine).order('id');
     if (r.error) { toast('读取渠道失败：' + netHint(r.error), 'err'); return false; }
     if (epoch !== loadEpoch) return false;   // 切换/回退已发生，丢弃迟到响应
     channels = (r.data || []).map(function (x) { return x.name; });
-    var sel = $('#chanFilter');
-    var cur = sel.value;
-    sel.innerHTML = opts(channels, cur, '全部渠道');
-    var dl = $('#channelList');
-    if (dl) dl.innerHTML = channels.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('');
+    renderChannelUi();
     return true;
   }
 
@@ -1142,8 +1151,11 @@
     var createdByVal = locked ? (profile.manager_name || '') : (row ? row.created_by : '');
     bizNoRpcFailed = false;
 
+    // 每次打开表单都按当前线重建联想候选：即便业务线切换过，也不会残留另一条线的渠道
+    renderChannelUi();
     var channelField = canAddChannel
-      ? '<input id="f_channel" list="channelList" value="' + esc(row ? row.channel : '') + '" placeholder="选已有渠道，或直接输入新渠道名">'
+      ? '<input id="f_channel" list="channelList" autocomplete="off" autocorrect="off" spellcheck="false" ' +
+        'value="' + esc(row ? row.channel : '') + '" placeholder="选已有渠道，或直接输入新渠道名">'
       : '<select id="f_channel">' + opts(channels, row ? row.channel : '', '请选择') + '</select>';
 
     // 业务编号：新建 = 打开弹窗时向数据库取号并显示成只读框；编辑 = 原编号只读，不可改
