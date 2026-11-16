@@ -716,7 +716,9 @@
       ['未结账', (total - settled) + ' 单']
     ];
     $('#kpi').innerHTML = items.map(function (it) {
-      return '<div class="card"><span>' + esc(it[0]) + '</span><b>' + esc(it[1]) + '</b></div>';
+      // 仅打标记用于前端隐藏；contract 仍参与计算并保留在导出/后台数据中
+      var cls = it[0] === '合同总价(万)' ? ' card-kpi-contract' : '';
+      return '<div class="card' + cls + '"><span>' + esc(it[0]) + '</span><b>' + esc(it[1]) + '</b></div>';
     }).join('');
   }
 
