@@ -193,6 +193,26 @@ Z + 签约日期(YYMMDD) + 当日流水号（至少 2 位，从 01 起；超过 
 - **组件**：排序/区间 chips 改胶囊分段；月份格、状态底色（7 档进度 + 结账状态）映射到苹果系统色浅底；弹窗圆角 18、iOS Alert 式删除强确认；手机端顶栏与 PC 顶栏毛玻璃（`backdrop-filter:saturate(180%) blur(20px)`，`@supports` 兜底半透明纯色）。
 - **性能**：零新依赖、动效仅 transform/opacity、CSS 增量 gzip 后约 1KB；保留 prefers-reduced-motion 全局减动效。
 
+### 4.7 双业务线（一手房 / 二手房）并存（2026-11-16）
+
+配套数据库补丁 `supabase_patch_business_line.sql`（在仓库外、需先到 Supabase SQL Editor 执行）。前端按最终口径实现：
+
+- **权限口径**：admin（唯一主管）与 manager（客户经理）双线通用、不做数据隔离，靠切换器「分开浏览统计」；**只有 channel 渠道用户被隔离**（本渠道 + 本业务线，由 RLS 保证）。`allowed_lines` 数组只用于决定切换器显隐：多线显示、单线隐藏。
+- **切换器**：放在顶栏 `.navmenu`（PC 直接显示、手机进 ≡ 菜单），选项 100% 来自 `profile.allowed_lines`，绝不硬编码；切换只换数据上下文（清空渠道筛选 → loadChannels/loadManagers → loadRecords），KPI / 明细 / 排序 / 导出自动跟随；标题同步显示当前业务线；导出 CSV 文件名带业务线。
+- **编号分线**：二手房 `Z+YYMMDD+流水`、一手房 `X+YYMMDD+流水`，两条线流水独立。`allocBizNo(date, line)` 调用双参 RPC，校验与降级算号都按线前缀；编辑签单不传 `business_line`，保持原线。
+- **开户口径**：客户经理账号固定双线；渠道用户归属当前业务线（要开另一条线的渠道用户先用切换器切过去）；渠道新增/账号邀请都带业务线字段。
+- **账号管理**：列表新增「业务线」列，搜索也匹配业务线。
+
+### 4.7 双业务线（一手房 / 二手房）并存（2026-11-16）
+
+配套数据库补丁 `supabase_patch_business_line.sql`（在仓库外、需先到 Supabase SQL Editor 执行）。前端按最终口径实现：
+
+- **权限口径**：admin（唯一主管）与 manager（客户经理）双线通用、不做数据隔离，靠切换器「分开浏览统计」；**只有 channel 渠道用户被隔离**（本渠道 + 本业务线，由 RLS 保证）。`allowed_lines` 数组只用于决定切换器显隐：多线显示、单线隐藏。
+- **切换器**：放在顶栏 `.navmenu`（PC 直接显示、手机进 ≡ 菜单），选项 100% 来自 `profile.allowed_lines`，绝不硬编码；切换只换数据上下文（清空渠道筛选 → loadChannels/loadManagers → loadRecords），KPI / 明细 / 排序 / 导出自动跟随；标题同步显示当前业务线；导出 CSV 文件名带业务线。
+- **编号分线**：二手房 `Z+YYMMDD+流水`、一手房 `X+YYMMDD+流水`，两条线流水独立。`allocBizNo(date, line)` 调用双参 RPC，校验与降级算号都按线前缀；编辑签单不传 `business_line`，保持原线。
+- **开户口径**：客户经理账号固定双线；渠道用户归属当前业务线（要开另一条线的渠道用户先用切换器切过去）；渠道新增/账号邀请都带业务线字段。
+- **账号管理**：列表新增「业务线」列，搜索也匹配业务线。
+
 ### 4.5 手机端适配（≤768px，纯 CSS + 顶栏结构微调）
 
 `app.js` 与业务逻辑零改动；全部移动端样式收在 `@media (max-width:768px)` 内，PC（>768px）渲染与旧版逐像素一致。
