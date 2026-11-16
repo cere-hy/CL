@@ -356,9 +356,15 @@
     .navmenu button{display:block;width:100%;text-align:left;background:transparent;
       padding:10px 14px;font-size:14px;font-weight:500;min-height:42px;border-radius:10px;color:var(--ink)}
     .navmenu button:active{background:rgba(0,0,0,.06)}
-    .navmenu #lineWrap{display:none;padding:6px 14px 8px;font-size:13px}
-    .navmenu #lineWrap.show{display:block}
-    .navmenu #lineSwitch{width:100%;margin-top:4px;min-height:40px;font-size:15px;border-radius:10px}
+    /* 业务线切换：菜单内一行紧凑排布（旧版 nowrap + width:100% 会把下拉框撑破菜单） */
+    .navmenu #lineWrap{display:none;padding:4px 12px 8px;font-size:12px;white-space:normal}
+    .navmenu #lineWrap.show{display:flex;align-items:center;gap:8px}
+    .navmenu #lineWrap > span{flex:0 0 auto;font-size:12px;color:var(--muted)}
+    .navmenu #lineSwitch{flex:1 1 auto;width:auto;max-width:none;min-width:0;
+      height:34px;min-height:34px;padding:5px 24px 5px 10px;
+      font-size:13px;font-weight:500;color:var(--ink);background:#F2F2F7;
+      border:1px solid var(--hairline);border-radius:8px}
+    .navmenu #lineSwitch:focus{outline:2px solid rgba(0,113,227,.3);outline-offset:0}
     #btnLogout{color:var(--accent);font-weight:600}
 
     .wrap{padding:10px 10px 96px}
