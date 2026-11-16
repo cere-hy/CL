@@ -35,6 +35,11 @@
   var rows = [];        // 服务端返回的行（已应用角色/渠道/进度/结账/搜索，未应用时间）
   var viewRows = [];    // 再应用「统计区间」后的行：KPI / 明细 / 导出统一以此为准
 
+  // 业务线：second_hand=二手房(Z 编号) / new_house=一手房(X 编号)。
+  // 单线账号只有一项、隐藏切换器；多线账号可切换，KPI/明细/导出随 currentLine 变。
+  var LINE_LABEL = { second_hand: '二手房系统', new_house: '一手房系统' };
+  var currentLine = 'second_hand';
+
   // 统计区间：all=全部时间 | preset=快捷区间 | months=勾选月份(可跨年多选) | range=自定义起止
   var period = { kind: 'all' };
   var draftMonths = []; // 月份面板里的临时勾选（点「应用」才生效）
@@ -398,13 +403,14 @@
   // 老库没跑过补丁时退化成本地推导，并提示去执行 supabase_patch_biz_no.sql。
   var bizNoRpcFailed = false;
 
-  function bizPrefix(dateStr) {
+  function bizPrefix(dateStr, line) {
     var d = isDay(dateStr) ? day(dateStr) : ymd(new Date());
-    return 'Z' + d.slice(2, 4) + d.slice(5, 7) + d.slice(8, 10);
+    var p = ((line || currentLine) === 'new_house') ? 'X' : 'Z';
+    return p + d.slice(2, 4) + d.slice(5, 7) + d.slice(8, 10);
   }
   function padSeq(n) { return (n < 10 ? '0' : '') + n; }
-  function localBizNo(dateStr) {
-    var pre = bizPrefix(dateStr), mx = 0;
+  function localBizNo(dateStr, line) {
+    var pre = bizPrefix(dateStr, line), mx = 0;
     rows.forEach(function (x) {
       var s = String(x.biz_no || '');
       if (s.indexOf(pre) === 0 && /^\d+$/.test(s.slice(pre.length))) {
@@ -413,20 +419,24 @@
     });
     return pre + padSeq(mx + 1);
   }
-  async function allocBizNo(dateStr) {
+  async function allocBizNo(dateStr, line) {
     var d = isDay(dateStr) ? day(dateStr) : null;
+    var useLine = line || currentLine;
+    var expect = useLine === 'new_house' ? 'X' : 'Z';
     if (db && typeof db.rpc === 'function') {
       try {
-        var r = await db.rpc('alloc_biz_no', { p_day: d });
-        if (r && !r.error && typeof r.data === 'string' && /^Z\d{8,}$/.test(r.data)) return r.data;
+        // 双参函数（p_day, p_line）：分线独立流水，前缀 Z / X 由数据库保证
+        var r = await db.rpc('alloc_biz_no', { p_day: d, p_line: useLine });
+        if (r && !r.error && typeof r.data === 'string' &&
+            new RegExp('^' + expect + '\\d{8,}$').test(r.data)) return r.data;
       } catch (e) { /* 函数不存在 / 网络异常 -> 走降级 */ }
     }
     bizNoRpcFailed = true;
-    return localBizNo(dateStr);
+    return localBizNo(dateStr, useLine);
   }
   function bizNoHint() {
     return bizNoRpcFailed
-      ? ' ｜ 当前库尚未启用服务端自动编号，建议在 SQL Editor 执行一次 supabase_patch_biz_no.sql'
+      ? ' ｜ 服务端自动编号未生效，建议在 SQL Editor 执行 supabase_patch_business_line.sql'
       : '';
   }
 
@@ -512,6 +522,10 @@
       return;
     }
     profile = p.data;
+    // 业务线只能来自档案里的 allowed_lines，绝不硬编码。数组为空 = 无权限，兜底二手房。
+    var allowed = Array.isArray(profile.allowed_lines) && profile.allowed_lines.length
+      ? profile.allowed_lines : ['second_hand'];
+    currentLine = allowed.indexOf(currentLine) >= 0 ? currentLine : allowed[0];
     $('#loginView').style.display = 'none';
     $('#appView').style.display = 'block';
     renderShell();
@@ -539,11 +553,42 @@
     if ($('#chanFilter') && !$('#chanFilter').value) {
       $('#chanFilter').innerHTML = opts(channels, '', '全部渠道');
     }
+
+    // 业务线切换器：按 allowed_lines 动态生成选项，只有多线账号才显示
+    var allowed = Array.isArray(profile.allowed_lines) ? profile.allowed_lines : [];
+    var sel = $('#lineSwitch'), wrap = $('#lineWrap');
+    if (sel && wrap) {
+      sel.innerHTML = allowed.map(function (l) {
+        return '<option value="' + esc(l) + '">' + esc(LINE_LABEL[l] || l) + '</option>';
+      }).join('');
+      sel.value = currentLine;
+      // 手机端菜单里用 block、PC 顶栏用 inline-flex，由 CSS 的 .show 类按视口分别控制；
+      // 不写内联 style.display，否则会盖掉媒体查询。
+      wrap.classList.toggle('show', allowed.length > 1);
+    }
+    var title = $('#appTitle');
+    if (title) title.textContent = allowed.length > 1
+      ? '客户汇总清单台账 · ' + (LINE_LABEL[currentLine] || currentLine)
+      : '客户汇总清单台账';
+  }
+
+  // 切换业务线：只换数据上下文，DOM/CSS 全部复用（手机端既有优化自动沿用）
+  async function switchLine(v) {
+    var allowed = Array.isArray(profile.allowed_lines) ? profile.allowed_lines : [];
+    if (!v || allowed.indexOf(v) < 0 || v === currentLine) return;
+    currentLine = v;
+    // 切换线后渠道集合不同，渠道筛选必须清空，否则会用上一线的渠道名过滤到 0 行
+    if ($('#chanFilter')) $('#chanFilter').value = '';
+    renderShell();
+    await Promise.all([loadChannels(), loadManagers()]);
+    await loadRecords();
+    toast('已切换到' + (LINE_LABEL[v] || v));
   }
 
   // ---------------------------------------------------------------- 载入数据
   async function loadChannels() {
-    var r = await db.from('channels').select('name').order('id');
+    // 渠道按业务线隔离（两线可有渠道名，但客户确认不同名；仍按线过滤保证干净）
+    var r = await db.from('channels').select('name').eq('business_line', currentLine).order('id');
     if (r.error) { toast('读取渠道失败：' + netHint(r.error), 'err'); return; }
     channels = (r.data || []).map(function (x) { return x.name; });
     var sel = $('#chanFilter');
@@ -571,6 +616,10 @@
   async function loadRecords() {
     // 服务端给个稳定初始序即可；最终展示顺序由 sortView() 按「列表排序」按钮决定
     var q = db.from('records').select('*').order('sign_date', { ascending: false }).order('id', { ascending: false });
+
+    // 业务线永远作为第一前提：双线账号靠它「分开浏览统计」，单线账号它是纵深防御。
+    // 真正的数据边界在数据库 RLS（只有 channel 按线隔离），这里保证界面口径一致。
+    q = q.eq('business_line', currentLine);
 
     // 前端再按字段过滤一次（纵深防御；真正的边界由数据库 RLS 保证）
     if (profile.role === 'channel') q = q.eq('channel', profile.channel || '__none__');
@@ -969,7 +1018,8 @@
     var bizField = '<input id="f_biz_no" class="auto-no" value="' +
       (isNew ? '生成中…' : esc(row.biz_no || '')) + '" readonly>';
     var bizHint = isNew
-      ? '系统自动生成，无需填写：Z + 签约日期 + 当日流水；改签约日期会自动换号'
+      ? '系统自动生成，无需填写：' + (currentLine === 'new_house' ? 'X' : 'Z') +
+        ' + 签约日期 + 当日流水；改签约日期会自动换号'
       : '编号一经生成不可修改，删除后也不会被复用';
 
     var h = '<div class="grid">' +
@@ -1006,13 +1056,18 @@
         created_by:       locked ? (profile.manager_name || '') : (v('f_created_by') || null),
         remark:           v('f_remark') || null
       };
+      // 新建签单归属当前业务线；编辑不传 business_line，保持原线不变
+      if (isNew) payload.business_line = currentLine;
       var savedBizNo = '';
       if (isNew) {
         savedBizNo = v('f_biz_no');
-        if (!/^Z\d{8,}$/.test(savedBizNo)) return toast('业务编号正在生成，请稍候再点保存', 'err');
+        var expectPrefix = currentLine === 'new_house' ? 'X' : 'Z';
+        if (!new RegExp('^' + expectPrefix + '\\d{8,}$').test(savedBizNo)) {
+          return toast('业务编号正在生成，请稍候再点保存', 'err');
+        }
         // 弹窗里改过签约日期：编号前缀必须跟着日期走，重新向数据库取号
-        if (savedBizNo.indexOf(bizPrefix(payload.sign_date)) !== 0) {
-          savedBizNo = await allocBizNo(payload.sign_date);
+        if (savedBizNo.indexOf(bizPrefix(payload.sign_date, currentLine)) !== 0) {
+          savedBizNo = await allocBizNo(payload.sign_date, currentLine);
           if ($('#f_biz_no')) $('#f_biz_no').value = savedBizNo;
         }
         payload.biz_no = savedBizNo;
@@ -1021,9 +1076,9 @@
       if (!payload.channel) return toast('请选择或填写渠道', 'err');
       if (!payload.manager_name) return toast('客户经理不能为空', 'err');
 
-      // 管理员手输了新渠道 → 自动写进 channels 表，之后所有人下拉可见
+      // 管理员手输了新渠道 → 自动写进 channels 表，归属当前业务线
       if (canAddChannel && channels.indexOf(payload.channel) < 0) {
-        var ci = await db.from('channels').insert({ name: payload.channel });
+        var ci = await db.from('channels').insert({ name: payload.channel, business_line: currentLine });
         if (ci.error) return toast('新增渠道失败：' + netHint(ci.error), 'err');
         channels.push(payload.channel);
         await loadChannels();
@@ -1072,7 +1127,7 @@
         var el0 = $('#f_biz_no');
         if (el0) el0.value = '生成中…';
         btn.disabled = true;
-        allocBizNo(dateStr).then(function (no) {
+        allocBizNo(dateStr, currentLine).then(function (no) {
           if (seq !== modalSeq || my !== reqNo) return;  // 弹窗已换 / 有更新的请求
           var el = $('#f_biz_no');
           if (el) el.value = no;
@@ -1080,7 +1135,7 @@
         }).catch(function () {
           if (seq !== modalSeq || my !== reqNo) return;
           var el = $('#f_biz_no');
-          if (el) el.value = localBizNo(dateStr);
+          if (el) el.value = localBizNo(dateStr, currentLine);
           btn.disabled = false;
         });
       };
@@ -1110,10 +1165,13 @@
       if (makeAcc && !pw) pw = DEFAULT_CHANNEL_PW;   // 留空按团队约定补默认密码
       if (makeAcc && (!phoneOk(phone) || pw.length < 6)) return toast('请填写合法的手机号和至少 6 位密码', 'err');
 
-      var r = await db.from('channels').insert({ name: name });
+      var r = await db.from('channels').insert({ name: name, business_line: currentLine });
       if (r.error) return toast(netHint(r.error), 'err');
       if (makeAcc) {
-        var ok = await createAccount(phone, pw, { role: 'channel', channel: name, display_name: name });
+        var ok = await createAccount(phone, pw, {
+          role: 'channel', channel: name, display_name: name,
+          allowed_lines: [currentLine]   // 渠道用户只归属本渠道所在业务线，数据被隔离
+        });
         if (!ok) return; // createAccount 内部已提示
       }
       closeModal();
@@ -1138,8 +1196,8 @@
       fld('初始密码', inp('p_pw', isMgr ? '' : DEFAULT_CHANNEL_PW, 'password',
           isMgr ? 'placeholder="默认与手机号相同，可修改"' : 'placeholder="默认 888888"')) +
       '<p class="muted small">' + (isMgr
-        ? '账号约定：登录名 = 本人手机号，初始密码 = 同一手机号（填手机号后自动带出，可手动修改）。创建后只能看到/录入「客户经理 = 本人」的签单，且客户经理、录入人自动锁定为本人。'
-        : '账号约定：登录名 = 本人手机号，初始密码 = <b>888888</b>（6 个八，可手动修改）。创建后只能看到「渠道 = 所绑定渠道」的数据，且为只读。') + '</p>';
+        ? '账号约定：登录名 = 本人手机号，初始密码 = 同一手机号（填手机号后自动带出，可手动修改）。客户经理双线通用（一手房 / 二手房都能登录），只能看到/录入「客户经理 = 本人」的签单，且客户经理、录入人自动锁定为本人。'
+        : '账号约定：登录名 = 本人手机号，初始密码 = <b>888888</b>（6 个八，可手动修改）。渠道用户只归属<b>当前业务线（' + esc(LINE_LABEL[currentLine] || currentLine) + '）</b>，且只看得到「渠道 = 所绑定渠道」的数据、只读；要开另一条线的渠道用户，请先用顶栏切换器切过去。') + '</p>';
     openModal(isMgr ? '新增客户经理' : '新增渠道用户', h, async function () {
       var phone = v('p_phone'), pw = v('p_pw');
       if (!phoneOk(phone)) return toast('请输入 11 位手机号', 'err');
@@ -1149,9 +1207,13 @@
       if (isMgr) {
         if (!v('p_name')) return toast('请填写客户经理姓名', 'err');
         inv.manager_name = v('p_name');
+        // 客户经理两线账号通用（一手房经理也有二手房权限），只是数据分开浏览统计
+        inv.allowed_lines = ['second_hand', 'new_house'];
       } else {
         if (!v('p_channel')) return toast('请选择归属渠道', 'err');
         inv.channel = v('p_channel');
+        // 渠道用户只归属当前业务线；渠道下拉已按线过滤，数据被 RLS 隔离在另一线之外
+        inv.allowed_lines = [currentLine];
       }
       var ok = await createAccount(phone, pw, inv);
       if (!ok) return;
@@ -1183,6 +1245,9 @@
       channel: invite.channel || null,
       manager_name: invite.manager_name || null,
       display_name: invite.display_name || null,
+      // 业务线：主管/客户经理双线通用；渠道用户归属其渠道所在线。
+      // 缺省时由数据库触发器按角色兜底，前端显式传是为了口径一致。
+      allowed_lines: invite.allowed_lines || null,
       created_by: me.id
     };
     var ins = await db.from('user_invites').upsert(payload, { onConflict: 'email' });
@@ -1255,7 +1320,7 @@
     var r;
     try {
       r = await db.from('profiles')
-        .select('id,phone,display_name,role,channel,manager_name')
+        .select('id,phone,display_name,role,channel,manager_name,allowed_lines')
         .order('role').order('phone');
     } catch (e) {
       var eb = $('#acctList');
@@ -1278,6 +1343,7 @@
     var shown = accountsCache.filter(function (u) {
       if (!k) return true;
       return [u.phone, u.display_name, u.role, ROLE_LABEL[u.role], u.channel, u.manager_name]
+        .concat(Array.isArray(u.allowed_lines) ? u.allowed_lines.map(function (l) { return LINE_LABEL[l] || l; }) : [])
         .some(function (x) { return String(x || '').toLowerCase().indexOf(k) >= 0; });
     });
     var cnt = $('#acctCount');
@@ -1288,14 +1354,17 @@
       return;
     }
     var h = '<table class="acct-tb"><thead><tr><th>登录名</th><th>显示名</th><th>角色</th>' +
-      '<th>绑定范围</th><th style="text-align:right">操作</th></tr></thead><tbody>';
+      '<th>业务线</th><th>绑定范围</th><th style="text-align:right">操作</th></tr></thead><tbody>';
     shown.forEach(function (u, i) {
       var self = !!(me && u.id === me.id);
       var bind = u.role === 'channel' ? (u.channel || '—')
                : u.role === 'manager' ? (u.manager_name || '—') : '全部数据';
+      var lines = Array.isArray(u.allowed_lines) && u.allowed_lines.length
+        ? u.allowed_lines.map(function (l) { return LINE_LABEL[l] || l; }).join(' / ') : '二手房系统';
       h += '<tr><td class="mono">' + esc(u.phone || u.id) + '</td>' +
         '<td>' + esc(u.display_name || '—') + '</td>' +
         '<td><span class="tag r-' + esc(u.role) + '">' + esc(ROLE_LABEL[u.role] || u.role) + '</span></td>' +
+        '<td>' + esc(lines) + '</td>' +
         '<td>' + esc(bind) + '</td>' +
         '<td style="text-align:right">' + (self
           ? '<span class="self">本人 · 请用「修改密码」</span>'
@@ -1370,7 +1439,8 @@
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     var tag = periodLabel().replace(/[\\/:*?"<>|~\s]/g, '');
-    a.download = '客户汇总清单台账_' + (tag || '全部时间') + '_' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.download = '客户汇总清单台账_' + (LINE_LABEL[currentLine] || currentLine) + '_' +
+      (tag || '全部时间') + '_' + new Date().toISOString().slice(0, 10) + '.csv';
     a.click();
     URL.revokeObjectURL(a.href);
   }
@@ -1404,6 +1474,8 @@
     };
     // 新增 DOM 节点做空值保护：只更新了 app.js、index.html 还是旧版时也不会整段报错
     var on = function (sel, fn) { var el = $(sel); if (el) el.onclick = fn; };
+    // 业务线切换：选项来自 allowed_lines，on() 空值保护兼容旧版 index.html
+    on('#lineSwitch', function () { switchLine(this.value); });
     // 密码管理（旧版 index.html 没有这两个按钮时，on() 会安全跳过）
     on('#btnChangePw', openChangePassword);
     on('#btnAccounts', openAccounts);
