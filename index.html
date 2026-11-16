@@ -115,6 +115,15 @@
   /* 顶栏按钮组：PC 用 contents 让按钮参与 header 排版；≡ 仅手机显示 */
   .navmenu{display:contents}
   #navBurger{display:none}
+  /* 业务线切换器：仅多线账号显示。PC 在顶栏、手机在 ≡ 菜单内，共用同一节点 */
+  #lineWrap{display:none;align-items:center;gap:6px;font-size:12px;color:var(--muted);
+    white-space:nowrap;flex:none}
+  #lineWrap.show{display:inline-flex}
+  #lineWrap span{flex:none;white-space:nowrap}
+  #lineSwitch{font-size:12px;font-weight:600;color:var(--navy);background:rgba(0,113,227,.07);
+    border:1px solid rgba(0,113,227,.18);border-radius:var(--r-pill);padding:5px 10px;
+    min-height:30px;cursor:pointer;max-width:150px}
+  #lineSwitch:focus{outline:2px solid rgba(0,113,227,.35);outline-offset:1px}
   .badge{display:inline-block;padding:3px 10px;border-radius:var(--r-pill);font-size:11px;font-weight:600;
     margin:0 5px;letter-spacing:.02em}
   .r-admin{background:rgba(0,113,227,.10);color:var(--navy)}
@@ -338,6 +347,9 @@
     .navmenu button{display:block;width:100%;text-align:left;background:transparent;
       padding:10px 14px;font-size:14px;font-weight:500;min-height:42px;border-radius:10px;color:var(--ink)}
     .navmenu button:active{background:rgba(0,0,0,.06)}
+    .navmenu #lineWrap{display:none;padding:6px 14px 8px;font-size:13px}
+    .navmenu #lineWrap.show{display:block}
+    .navmenu #lineSwitch{width:100%;margin-top:4px;min-height:40px;font-size:15px;border-radius:10px}
     #btnLogout{color:var(--accent);font-weight:600}
 
     .wrap{padding:10px 10px 96px}
@@ -501,13 +513,17 @@
 <!-- ===================== 主界面 ===================== -->
 <div id="appView" style="display:none">
   <header>
-    <span class="logo">客户汇总清单台账</span>
+    <span class="logo" id="appTitle">客户汇总清单台账</span>
     <span class="issue">内部台账 · 2026</span>
     <span id="who"></span>
     <span class="grow"></span>
     <!-- PC：navmenu 为 display:contents，按钮直接参与 header 排版；
          手机：navmenu 变为 ≡ 下拉菜单（见底部 media 查询）。按钮 id 与事件绑定均未变。 -->
     <div class="navmenu" id="navMenu">
+      <!-- 业务线切换：仅多线账号显示，选项由 app.js 按 allowed_lines 动态填充 -->
+      <label id="lineWrap"><span>业务线</span>
+        <select id="lineSwitch"></select>
+      </label>
       <button id="btnAccounts" class="quiet" style="display:none">账号管理</button>
       <button id="btnChangePw" class="quiet">修改密码</button>
       <button id="btnRefresh" class="quiet">刷新</button>
@@ -656,7 +672,7 @@
   }
 </script>
 <script src="config.js"></script>
-<script src="app.js?v=20261115b"></script>
+<script src="app.js?v=20261116a"></script>
 
 <!-- 移动端 ≡ 菜单开合：纯展示逻辑，不读写任何业务数据（唯一新增的 JS） -->
 <script>
