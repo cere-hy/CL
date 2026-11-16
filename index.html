@@ -138,6 +138,8 @@
   .card span{display:block;color:var(--muted);font-size:11px;letter-spacing:.04em;margin-bottom:6px}
   .card b{font-size:clamp(20px,2vw,26px);font-weight:700;
     color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  /* 合同总价仅前端隐藏；计算/导出/数据库字段一律保留 */
+  .card-kpi-contract{display:none!important}
 
   .toolbar,.sortbar,.periodbar{background:var(--paper);border-radius:var(--r-card);
     box-shadow:var(--sh-card);padding:10px 14px;display:flex;gap:9px;align-items:center;
@@ -402,8 +404,8 @@
     .mgrid{grid-template-columns:repeat(4,1fr)}
 
     /* ── KPI：紧凑网格 ── */
-    #kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(76px,1fr));gap:8px;margin-bottom:10px}
-    .card{min-width:0;padding:8px 10px;border-radius:12px}
+    #kpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-bottom:9px}
+    .card{min-width:0;padding:8px 6px;border-radius:12px}
     .card span{font-size:10px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .card b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
@@ -715,7 +717,7 @@
   }
 </script>
 <script src="config.js"></script>
-<script src="app.js?v=20261116b"></script>
+<script src="app.js?v=20261116c"></script>
 
 <!-- 移动端 ≡ 菜单开合：纯展示逻辑，不读写任何业务数据（唯一新增的 JS） -->
 <script>
