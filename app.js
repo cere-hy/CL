@@ -1176,7 +1176,7 @@
       fld('合同总价(万)', inp('f_contract_amount', row ? row.contract_amount : '', 'number', 'step="0.01" min="0"')) +
       fld('贷款类型', '<select id="f_loan_type">' + opts(OPTIONS.loan_type, row ? row.loan_type : '', '请选择') + '</select>') +
       fld('贷款金额(万)', inp('f_loan_amount', row ? row.loan_amount : '', 'number', 'step="0.01" min="0"')) +
-      fld('客户经理 *', '<input id="f_manager_name" value="' + esc(managerVal) + '"' + (locked ? ' disabled' : ' list="managerList"') + '>', locked ? '已锁定为本人，前端与数据库双重锁定' : '默认 4 人可选，也可手填新姓名') +
+      fld('客户经理 *', '<input id="f_manager_name" value="' + esc(managerVal) + '"' + (locked ? ' disabled' : ' list="managerList"') + '>', locked ? '已锁定为本人，前端与数据库双重锁定' : '可选择已有经理，也可手填新姓名') +
       fld('录入人', '<input id="f_created_by" value="' + esc(createdByVal) + '"' + (locked ? ' disabled' : '') + '>', locked ? '已锁定为本人' : '') +
       fld('当前进度', '<select id="f_progress">' + opts(OPTIONS.progress, row ? row.progress : '', '请选择') + '</select>') +
       fld('缺件清单', inp('f_missing_docs', row ? row.missing_docs : '')) +
